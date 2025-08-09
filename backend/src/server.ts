@@ -6,16 +6,15 @@ import { initSocket } from "./socket";
 import { SERVER_PORT } from "./config";
 
 const app = express();
-app.use(cors());
+app.use(cors({ origin: "http://localhost:5173", credentials: true }));
 app.use(express.json());
-
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 const httpServer = http.createServer(app);
 
 const io = new Server(httpServer, {
     cors: {
-        origin: "*", // tighten in prod
+        origin: "http://localhost:5173", // tighten in prod
         methods: ["GET", "POST"]
     }
 });

@@ -48,13 +48,17 @@ export function getRoom(roomId: string) {
     return rooms.get(roomId) ?? null;
 }
 
+export function getAllRooms() {
+    return Array.from(rooms.values());
+}
+
 export function getPublicRoomsSummary() {
     const arr = Array.from(rooms.values())
-        .filter(r => !r.isPrivate)
         .map(r => ({
             roomId: r.roomId,
             name: r.name,
             playerCount: r.players.length,
+            players: r.players,
             maxPlayers: r.maxPlayers,
             createdAt: r.createdAt
         }));
