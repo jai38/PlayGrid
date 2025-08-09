@@ -8,6 +8,7 @@ import {
   onRoomJoined,
   onRoomsUpdate,
 } from "../services/socket";
+import Toast from "../components/Toast";
 
 export default function Lobby() {
   const [playerName, setPlayerName] = useState(
@@ -17,10 +18,28 @@ export default function Lobby() {
   const [rooms, setRooms] = useState<any[]>([]);
   const [error, setError] = useState("");
 
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
+  const [selectedRoomForPassword, setSelectedRoomForPassword] = useState(null);
+  const [passwordInput, setPasswordInput] = useState("");
+
   // New states
   const [roomName, setRoomName] = useState("");
   const [password, setPassword] = useState("");
   const [isPrivate, setIsPrivate] = useState(false);
+
+  const [toastMessage, setToastMessage] = useState("");
+  const [toastType, setToastType] = useState<"error" | "success" | "info">(
+    "error",
+  );
+
+  const showToast = (
+    msg: string,
+    type: "error" | "success" | "info" = "error",
+  ) => {
+    setToastMessage(msg);
+    setToastType(type);
+    setTimeout(() => setToastMessage(""), 4000);
+  };
 
   useEffect(() => {
     const s = connectSocket(
@@ -34,7 +53,7 @@ export default function Lobby() {
       localStorage.setItem("currentPlayer", JSON.stringify(data.player));
       localStorage.setItem("currentRoom", JSON.stringify(data.room));
     });
-    onErrorMessage(setError);
+    onErrorMessage(handleError);
     return () => {
       s.off("roomsUpdate");
       s.off("roomJoined");
@@ -42,6 +61,14 @@ export default function Lobby() {
       s.off("errorMessage");
     };
   }, []);
+  const handleError = (msg: any) => {
+    console.log("Error received:", msg);
+    if (msg.type === "error") {
+      showToast(msg.message, "error");
+    } else {
+      console.error("Unknown error type:", msg);
+    }
+  };
 
   const handleCreate = () => {
     if (playerName.trim() && roomName.trim()) {
@@ -57,25 +84,39 @@ export default function Lobby() {
       setRoomId(room.roomId);
       const alreadyJoined = localStorage.getItem("roomId") === roomId;
       if (!alreadyJoined) {
-        joinRoom(
-          room.roomId,
-          playerName,
-          room.isPrivate ? prompt("Enter password:") : undefined,
-        );
+        if (room.isPrivate) {
+          setSelectedRoomForPassword(room);
+          setPasswordInput("");
+          setPasswordModalOpen(true);
+        } else {
+          joinRoom(room.roomId, playerName, undefined);
+        }
       }
     } else {
       setError("Please enter a valid gamer tag.");
     }
   };
 
+  const handlePasswordSubmit = () => {
+    joinRoom(selectedRoomForPassword?.roomId, playerName, passwordInput);
+    setPasswordModalOpen(false);
+  };
+
   useEffect(() => {
-    if (localStorage.getItem("currentRoom")) {
+    if (localStorage.getItem("currentRoom") && localStorage.getItem("roomId")) {
       window.location.href = `/room/${localStorage.getItem("roomId")}`;
     }
   }, []);
 
   return (
     <div className="max-w-md mx-auto min-h-screen bg-gradient-to-b from-indigo-900 via-purple-900 to-black text-white p-4 flex flex-col">
+      {toastMessage && (
+        <Toast
+          message={toastMessage}
+          type={toastType}
+          onClose={() => setToastMessage("")}
+        />
+      )}
       <h2 className="text-3xl font-extrabold text-center mb-6 tracking-wide drop-shadow-lg">
         🎮 Game Lobby
       </h2>
@@ -107,13 +148,26 @@ export default function Lobby() {
         />
 
         <div className="flex items-center mb-3">
-          <input
-            type="checkbox"
-            checked={isPrivate}
-            onChange={(e) => setIsPrivate(e.target.checked)}
-            className="accent-purple-500 w-5 h-5 mr-2"
-          />
-          <label className="text-sm">Private Room</label>
+          <label
+            htmlFor="private-toggle"
+            className="mr-3 text-sm font-medium text-gray-100">
+            Private Room
+          </label>
+          <button
+            id="private-toggle"
+            type="button"
+            role="switch"
+            aria-checked={isPrivate}
+            onClick={() => setIsPrivate(!isPrivate)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+              isPrivate ? "bg-purple-600" : "bg-gray-300"
+            }`}>
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                isPrivate ? "translate-x-6" : "translate-x-1"
+              }`}
+            />
+          </button>
         </div>
 
         {isPrivate && (
@@ -157,6 +211,32 @@ export default function Lobby() {
               </li>
             ))}
           </ul>
+        </div>
+      )}
+      {passwordModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-gradient-to-r from-indigo-700 to-purple-700 transition-all p-3 rounded-lg shadow rounded p-6 w-80 shadow-lg">
+            <h3 className="font-semibold mb-4">Enter Room Password</h3>
+            <input
+              type="password"
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              className="bg-white/10 border border-white/20 p-3 rounded-lg w-full mb-3 focus:outline-none focus:ring-2 focus:ring-purple-400"
+              autoFocus
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setPasswordModalOpen(false)}
+                className="px-4 py-2 rounded border">
+                Cancel
+              </button>
+              <button
+                onClick={handlePasswordSubmit}
+                className="bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 transition-all text-white px-4 py-2 rounded">
+                Join
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

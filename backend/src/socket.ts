@@ -68,6 +68,7 @@ export function initSocket(io: Server) {
                 });
             } catch (err) {
                 console.error("createRoom error", err);
+                io.emit("errorMessage", { type: "error", message: "Failed to create room" });
                 safeAck(ack, { success: false, error: "Failed to create room" });
             }
         });
@@ -77,14 +78,21 @@ export function initSocket(io: Server) {
                 const { roomId, playerName, playerId, password } = payload;
                 const room = getRoom(roomId);
 
-                if (!room) return safeAck(ack, { success: false, error: "Room_not_found" });
+                if (!room) {
+                    io.emit("errorMessage", { type: "error", message: "Room not found" });
+                    return safeAck(ack, { success: false, error: "Room_not_found" })
+                };
 
                 if (room.isPrivate && room.password && room.password !== password) {
+                    io.emit("errorMessage", { type: "error", message: "Invalid Password" });
                     return safeAck(ack, { success: false, error: "Invalid_password" });
                 }
 
                 const player = addPlayerToRoom(roomId, socket.id, playerName, playerId, false);
-                if (!player) return safeAck(ack, { success: false, error: "Room_full_or_could_not_join" });
+                if (!player) {
+                    io.emit("errorMessage", { type: "error", message: "Room is full or could not join" });
+                    return safeAck(ack, { success: false, error: "Room_full_or_could_not_join" })
+                };
 
                 // Make sure socket is ONLY in its own private socket room + this game room
                 for (const r of socket.rooms) {
@@ -116,6 +124,7 @@ export function initSocket(io: Server) {
                 safeAck(ack, { success: true });
             } catch (err) {
                 console.error("joinRoom error", err);
+                io.emit("errorMessage", { type: "error", message: "Failed to join room" });
                 safeAck(ack, { success: false, error: "Failed to join room" });
             }
         });
@@ -130,6 +139,7 @@ export function initSocket(io: Server) {
                 safeAck(ack, players);
             }
             catch (err) {
+                io.emit("errorMessage", { type: "error", message: "Failed to get current players" });
                 console.error("getCurrentPlayers error", err);
                 safeAck(ack, []);
             }
@@ -151,6 +161,7 @@ export function initSocket(io: Server) {
                 safeAck(ack, { success: true });
             } catch (err) {
                 console.error("leaveRoom error", err);
+                io.emit("errorMessage", { type: "error", message: "Failed to leave room" })
                 safeAck(ack, { success: false, error: "Failed to leave room" });
             }
         });
@@ -169,6 +180,7 @@ export function initSocket(io: Server) {
                 safeAck(ack, { success: true });
             } catch (err) {
                 console.error("sendMessage error", err);
+                io.emit("errorMessage", { type: "error", message: "Failed to send message" });
                 safeAck(ack, { success: false, error: "Failed to send message" });
             }
         });
@@ -187,6 +199,7 @@ export function initSocket(io: Server) {
                 safeAck(ack, { success: true });
             } catch (err) {
                 console.error("reconnectToRoom error", err);
+                io.emit("errorMessage", { type: "error", message: "Reconnect failed" });
                 safeAck(ack, { success: false, error: "Reconnect failed" });
             }
         });

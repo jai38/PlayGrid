@@ -31,8 +31,6 @@ export const createRoom = (playerName: string, roomName: string, isPrivate: bool
         if (response.success) {
             localStorage.setItem("roomId", response.roomId);
             window.location.href = `/room/${response.roomId}`;
-        } else {
-            alert(`Error creating room: ${response.error}`);
         }
     });
 };
@@ -42,8 +40,6 @@ export const joinRoom = (roomId: string, playerName: string, password?: string) 
         if (response.success) {
             localStorage.setItem("roomId", roomId);
             window.location.href = `/room/${roomId}`;
-        } else {
-            alert(`Error joining room: ${response.error}`);
         }
     });
 };
