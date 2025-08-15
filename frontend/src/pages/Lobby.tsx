@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   connectSocket,
   createRoom,
@@ -11,6 +12,7 @@ import {
 import Toast from "../components/Toast";
 
 export default function Lobby() {
+  const navigate = useNavigate();
   const [playerName, setPlayerName] = useState(
     localStorage.getItem("playerName") || "",
   );
@@ -19,7 +21,8 @@ export default function Lobby() {
   const [error, setError] = useState("");
 
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
-  const [selectedRoomForPassword, setSelectedRoomForPassword] = useState(null);
+  const [selectedRoomForPassword, setSelectedRoomForPassword] =
+    useState<any>(null);
   const [passwordInput, setPasswordInput] = useState("");
 
   // New states
@@ -73,7 +76,15 @@ export default function Lobby() {
   const handleCreate = () => {
     if (playerName.trim() && roomName.trim()) {
       localStorage.setItem("playerName", playerName);
-      createRoom(playerName, roomName, isPrivate, password || undefined);
+      createRoom(
+        playerName,
+        roomName,
+        isPrivate,
+        password || undefined,
+        (roomId) => {
+          navigate(`/room/${roomId}`);
+        },
+      );
     } else {
       setError("Please enter a valid gamer tag and room name.");
     }
@@ -89,7 +100,9 @@ export default function Lobby() {
           setPasswordInput("");
           setPasswordModalOpen(true);
         } else {
-          joinRoom(room.roomId, playerName, undefined);
+          joinRoom(room.roomId, playerName, undefined, undefined, (roomId) => {
+            navigate(`/room/${roomId}`);
+          });
         }
       }
     } else {
@@ -98,15 +111,23 @@ export default function Lobby() {
   };
 
   const handlePasswordSubmit = () => {
-    joinRoom(selectedRoomForPassword?.roomId, playerName, passwordInput);
+    joinRoom(
+      selectedRoomForPassword?.roomId,
+      playerName,
+      undefined,
+      passwordInput,
+      (roomId) => {
+        navigate(`/room/${roomId}`);
+      },
+    );
     setPasswordModalOpen(false);
   };
 
   useEffect(() => {
     if (localStorage.getItem("currentRoom") && localStorage.getItem("roomId")) {
-      window.location.href = `/room/${localStorage.getItem("roomId")}`;
+      navigate(`/room/${localStorage.getItem("roomId")}`);
     }
-  }, []);
+  }, [navigate]);
 
   return (
     <div className="max-w-md mx-auto min-h-screen bg-gradient-to-b from-indigo-900 via-purple-900 to-black text-white p-4 flex flex-col">

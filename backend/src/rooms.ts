@@ -25,6 +25,13 @@ export type Room = {
     players: Player[];
     maxPlayers: number;
     createdAt: number;
+    game?: Game;
+};
+
+export type Game = {
+    id: string;
+    instance: any;
+    state: any;
 };
 
 const rooms = new Map<string, Room>();
@@ -38,7 +45,8 @@ export function createRoom(name: string, isPrivate = false, password?: string | 
         password: password ?? null,
         players: [],
         maxPlayers,
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        game: undefined
     };
     rooms.set(roomId, room);
     return room;

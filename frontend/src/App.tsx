@@ -4,6 +4,7 @@ import Home from "./pages/Home";
 import Lobby from "./pages/Lobby";
 import Room from "./pages/Room";
 import NotFound from "./pages/NotFound";
+import GameLoader from "./pages/GameLoader";
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/lobby" element={<Lobby />} />
           <Route path="/room/:roomId" element={<Room />} />
+          <Route path="/game/:gameId/:roomId" element={<GameLoader />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
