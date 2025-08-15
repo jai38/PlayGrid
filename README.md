@@ -33,18 +33,15 @@ Play games like Monopoly, Catan, and more — right in your browser with friends
 git clone https://github.com/PlayGrid/PlayGrid.git
 cd PlayGrid
 
-# Install dependencies
-npm install
-
 # Start backend
-cd server
+cd backend
 npm install
 npm run dev
 
 # Start frontend
-cd client
+cd frontend
 npm install
-npm start
+npm run dev
 ```
 
 ---
