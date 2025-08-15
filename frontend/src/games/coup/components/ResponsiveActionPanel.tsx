@@ -43,8 +43,9 @@ export const ResponsiveActionPanel: React.FC<ResponsiveActionPanelProps> = ({
 
   const coins = myPlayerState?.coins || 0;
   const isAlive = myPlayerState?.isAlive || false;
-  const canAct = isMyTurn && isAlive;
-  const myInfluences = myPlayerState?.influences;
+  const canAct = isMyTurn && isAlive && !pendingAction;
+  const myInfluences =
+    myPlayerState?.influences?.filter((card) => !card.isRevealed) || [];
 
   const actionCategories = [
     {
@@ -213,43 +214,44 @@ export const ResponsiveActionPanel: React.FC<ResponsiveActionPanelProps> = ({
       {/* Panel Content */}
       <div className="max-h-[60vh] lg:max-h-none overflow-y-auto p-4 space-y-4">
         {/* Pending Action Banner */}
-        {pendingAction && (
-          <div className="p-4 bg-gradient-to-r from-yellow-900/50 to-red-900/50 border border-yellow-500/30 rounded-lg">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <div className="font-bold text-yellow-300">
-                  ⏳ {pendingAction.type}
+        {pendingAction &&
+          myPlayerState?.playerId != pendingAction.fromPlayerId && (
+            <div className="p-4 bg-gradient-to-r from-yellow-900/50 to-red-900/50 border border-yellow-500/30 rounded-lg">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <div className="font-bold text-yellow-300">
+                    ⏳ {pendingAction.type}
+                  </div>
+                  <div className="text-sm text-gray-300">
+                    by{" "}
+                    {
+                      players.find(
+                        (p) => p.playerId === pendingAction.fromPlayerId,
+                      )?.name
+                    }
+                  </div>
                 </div>
-                <div className="text-sm text-gray-300">
-                  by{" "}
-                  {
-                    players.find(
-                      (p) => p.playerId === pendingAction.fromPlayerId,
-                    )?.name
-                  }
-                </div>
-              </div>
 
-              <div className="flex gap-2">
-                <button
-                  onClick={onBlock}
-                  className="px-3 py-1 bg-yellow-600 hover:bg-yellow-500 text-white rounded font-bold text-sm">
-                  🛡️ Block
-                </button>
-                <button
-                  onClick={onChallenge}
-                  className="px-3 py-1 bg-red-600 hover:bg-red-500 text-white rounded font-bold text-sm">
-                  ⚔️ Challenge
-                </button>
-                <button
-                  onClick={onResolve}
-                  className="px-3 py-1 bg-green-600 hover:bg-green-500 text-white rounded font-bold text-sm">
-                  ✓ Resolve
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={onBlock}
+                    className="px-3 py-1 bg-yellow-600 hover:bg-yellow-500 text-white rounded font-bold text-sm">
+                    🛡️ Block
+                  </button>
+                  <button
+                    onClick={onChallenge}
+                    className="px-3 py-1 bg-red-600 hover:bg-red-500 text-white rounded font-bold text-sm">
+                    ⚔️ Challenge
+                  </button>
+                  <button
+                    onClick={onResolve}
+                    className="px-3 py-1 bg-green-600 hover:bg-green-500 text-white rounded font-bold text-sm">
+                    ✓ Resolve
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
         {/* Player Status (Always Visible on Desktop) */}
         <div className={`${activeTab !== "actions" && "lg:block hidden"}`}>
