@@ -1,6 +1,10 @@
 ---
-name: "💡 Feature request"
+name: "\U0001F4A1 Feature request"
 about: Suggest a new feature for PlayGrid
+title: ''
+labels: ''
+assignees: ''
+
 ---
 
 **Describe the feature**
