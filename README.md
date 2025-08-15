@@ -30,7 +30,7 @@ Play games like Monopoly, Catan, and more — right in your browser with friends
 
 ```bash
 # Clone the repo
-git clone https://github.com/PlayGrid/PlayGrid.git
+git clone https://github.com/PlayGridAI/PlayGrid.git
 cd PlayGrid
 
 # Start backend
@@ -64,9 +64,8 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
 
 ## 🌍 Community
 
-- 💬 [Join our Discord](https://discord.gg/YOUR_INVITE)
-- 🐛 [Report Bugs](https://github.com/PlayGrid/PlayGrid/issues)
-- 💡 [Request Features](https://github.com/PlayGrid/PlayGrid/issues)
+- 🐛 [Report Bugs](https://github.com/PlayGridAI/PlayGrid/issues)
+- 💡 [Request Features](https://github.com/PlayGridAI/PlayGrid/issues)
 
 ---
 
