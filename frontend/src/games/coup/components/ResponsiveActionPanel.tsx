@@ -44,8 +44,7 @@ export const ResponsiveActionPanel: React.FC<ResponsiveActionPanelProps> = ({
   const coins = myPlayerState?.coins || 0;
   const isAlive = myPlayerState?.isAlive || false;
   const canAct = isMyTurn && isAlive && !pendingAction;
-  const myInfluences =
-    myPlayerState?.influences?.filter((card) => !card.isRevealed) || [];
+  const myInfluences = myPlayerState?.influences || [];
 
   const actionCategories = [
     {

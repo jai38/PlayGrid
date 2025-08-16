@@ -235,7 +235,7 @@ export class CoupGame implements IGame {
                 break;
             case "EXCHANGE":
                 const drawn = [state.deck.pop()!, state.deck.pop()!];
-                const combined = [...from.influence, ...drawn];
+                const combined = [...drawn, ...from.influence];
                 // For now, auto-pick first two → later add choice via frontend
                 from.influence = combined.slice(0, 2);
                 state.deck.push(...combined.slice(2));

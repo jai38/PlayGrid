@@ -198,7 +198,7 @@ export const PlayerArea3D: React.FC<PlayerArea3DProps> = ({
           {/* Lost Influences (smaller, faded) */}
           {lostInfluences.length > 0 && (
             <div
-              className={`flex items-center justify-center gap-0.5 opacity-60 ${
+              className={`flex items-center justify-center gap-0.5  ${
                 isBottomHalf ? "order-2" : "order-2"
               }`}>
               {lostInfluences.map((influence, index) => (

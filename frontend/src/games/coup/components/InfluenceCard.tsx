@@ -40,9 +40,7 @@ export const InfluenceCard: React.FC<InfluenceCardProps> = ({
 
   return (
     <div
-      className={`influence-card ${onClick ? "cursor-pointer" : ""} ${
-        isLost ? "opacity-40" : ""
-      }`}
+      className={`influence-card ${onClick ? "cursor-pointer" : ""}`}
       style={{
         width: dim.width,
         height: dim.height,

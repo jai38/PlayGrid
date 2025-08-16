@@ -73,22 +73,34 @@ export default function CoupUI3D(): JSX.Element {
   useEffect(() => {
     if (state) {
       // Transform players to include influence cards and positions
+      console.log("Transforming players with influences", {
+        players: state.players,
+      });
       const playersWithInfluences = state.players.map((player, index) => ({
         ...player,
         position: index,
-        influences:
-          player.influence?.map((influence) =>
+        influences: [
+          ...(player.influence?.map((influence) =>
             generateInfluences(
               player.playerId,
               currentPlayer.playerId === player.playerId,
               influence,
             ),
-          ) ||
-          generateMockInfluences(
-            player.playerId,
-            currentPlayer.playerId === player.playerId,
-          ),
+          ) || []),
+          ...(player.revealedCards?.map((influence) =>
+            generateInfluences(
+              player.playerId,
+              currentPlayer.playerId === player.playerId,
+              influence,
+              true, // Always revealed for revealed cards
+            ),
+          ) || []),
+        ],
       }));
+      console.log(
+        "Transforming players with influences",
+        playersWithInfluences,
+      );
       setTransformedPlayers([...playersWithInfluences]);
     }
   }, [state, currentPlayer.playerId]);
@@ -143,6 +155,7 @@ export default function CoupUI3D(): JSX.Element {
     playerId: string,
     isCurrentPlayer: boolean,
     type: string,
+    isRevealed: boolean = false,
   ): InfluenceCard {
     console.log("Generating influence for", {
       playerId,
@@ -154,43 +167,43 @@ export default function CoupUI3D(): JSX.Element {
         return {
           id: `${playerId}-duke`,
           type: InfluenceType.DUKE,
-          isRevealed: false,
-          isLost: false,
+          isRevealed: isRevealed,
+          isLost: isRevealed,
         };
       case InfluenceType.ASSASSIN:
         return {
           id: `${playerId}-assassin`,
           type: InfluenceType.ASSASSIN,
-          isRevealed: false,
-          isLost: false,
+          isRevealed: isRevealed,
+          isLost: isRevealed,
         };
       case InfluenceType.CAPTAIN:
         return {
           id: `${playerId}-captain`,
           type: InfluenceType.CAPTAIN,
-          isRevealed: false,
-          isLost: false,
+          isRevealed: isRevealed,
+          isLost: isRevealed,
         };
       case InfluenceType.CONTESSA:
         return {
           id: `${playerId}-contessa`,
           type: InfluenceType.CONTESSA,
-          isRevealed: false,
-          isLost: false,
+          isRevealed: isRevealed,
+          isLost: isRevealed,
         };
       case InfluenceType.AMBASSADOR:
         return {
           id: `${playerId}-ambassador`,
           type: InfluenceType.AMBASSADOR,
-          isRevealed: false,
-          isLost: false,
+          isRevealed: isRevealed,
+          isLost: isRevealed,
         };
       default:
         return {
           id: `${playerId}-unknown`,
           type: InfluenceType.DUKE, // Default to Duke for unknown types
-          isRevealed: false,
-          isLost: false,
+          isRevealed: isRevealed,
+          isLost: isRevealed,
         };
     }
   }
