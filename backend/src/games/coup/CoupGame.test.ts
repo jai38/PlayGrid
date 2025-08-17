@@ -124,7 +124,7 @@ describe("CoupGame", () => {
         const targetId = state.players[1].playerId;
         state.players[1].influence = ["Duke"];
         // Lose influence
-        (game as any).loseInfluence(state, targetId);
+        (game as any).loseInfluence("room1", state, targetId);
         expect(state.players[1].influence.length).toBe(0);
         expect(state.players[1].isAlive).toBe(false);
     });
