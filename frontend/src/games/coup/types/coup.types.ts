@@ -1,5 +1,16 @@
 // src/games/coup/types/coup.types.ts
 
+// Action log entry for the game
+export interface ActionLogEntry {
+    id: string;
+    timestamp: number;
+    playerName: string;
+    action: string;
+    target?: string;
+    outcome: string;
+    turnNumber: number;
+}
+
 export interface CoupPlayer {
     playerId: string;
     name: string;
@@ -23,6 +34,8 @@ export interface PendingAction {
 export interface CoupGameState {
     players: CoupPlayer[];
     currentTurnPlayerId: string;
+    turnNumber?: number;
+    actionLogs?: ActionLogEntry[];
     pendingAction?: PendingAction;
     winner?: string;
 }

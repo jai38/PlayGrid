@@ -137,6 +137,18 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
             setTimeout(() => setError(''), 3000);
         };
 
+        const handleActionLog = (data: any) => {
+            // Update state with new log entry
+            setState((prevState) => {
+                if (!prevState) return prevState;
+                
+                return {
+                    ...prevState,
+                    actionLogs: data.allLogs || []
+                };
+            });
+        };
+
         socket.on('game:state', handleGameState);
         socket.on('errorMessage', handleError);
         socket.on('player:disconnected', handlePlayerDisconnected);
@@ -145,6 +157,7 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
         socket.on("coup:chooseExchangeCards", handleChooseExchangeCards);
         socket.on("coup:chooseBlockCard", handleChooseBlockCard);
         socket.on("coup:blockAction", handleBlockAction);
+        socket.on("coup:actionLog", handleActionLog);
 
         return () => {
             socket.off('game:state', handleGameState);
@@ -155,6 +168,7 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
             socket.off("coup:chooseExchangeCards", handleChooseExchangeCards);
             socket.off("coup:chooseBlockCard", handleChooseBlockCard);
             socket.off("coup:blockAction", handleBlockAction);
+            socket.off("coup:actionLog", handleActionLog);
         };
     }, []);
 
