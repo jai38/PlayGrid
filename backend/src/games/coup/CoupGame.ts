@@ -24,11 +24,12 @@ export interface CoupGameState extends GameState {
         toPlayerId?: string;
         blockedBy?: string;
     };
-    winnerId?: string;
+    winner?: string;
 }
 
 export class CoupGame implements IGame {
     gameId = "coup";
+    onEvent: ((roomId: string | string[], event: any, payload: any) => void) | undefined;
 
     // Create full deck (3 of each card)
     private createDeck(): CoupCard[] {
@@ -84,6 +85,7 @@ export class CoupGame implements IGame {
             case "TAX":
             case "FOREIGN_AID":
             case "EXCHANGE":
+            case "LOSE_CARD":
                 return true;
 
             case "COUP":
@@ -132,7 +134,7 @@ export class CoupGame implements IGame {
 
             case "COUP":
                 player.coins -= 7;
-                this.loseInfluence(state, action.payload.targetId);
+                this.loseInfluence(roomId, state, action.payload.targetId);
                 break;
 
             case "ASSASSINATE":
@@ -161,13 +163,15 @@ export class CoupGame implements IGame {
                 break;
 
             case "CHALLENGE":
-                this.resolveChallenge(state, action.payload.targetId, action.playerId);
+                this.resolveChallenge(roomId, state, action.payload.targetId, action.playerId);
                 break;
 
             case "RESOLVE_ACTION":
                 // Called after all block/challenge opportunities passed
-                this.resolvePendingAction(state);
+                this.resolvePendingAction(roomId, state);
                 break;
+            case "LOSE_CARD":
+                this.loseCard(roomId, state, action.playerId, action.payload.card);
         }
 
         if (action.type !== "CHALLENGE" && action.type !== "BLOCK" && action.type !== "RESOLVE_ACTION") {
@@ -177,7 +181,7 @@ export class CoupGame implements IGame {
         return state;
     }
 
-    private resolveChallenge(state: CoupGameState, claimedPlayerId: string, challengerId: string) {
+    private resolveChallenge(roomId: string, state: CoupGameState, claimedPlayerId: string, challengerId: string) {
         const claimedPlayer = state.players.find(p => p.playerId === claimedPlayerId);
         const challenger = state.players.find(p => p.playerId === challengerId);
         if (!claimedPlayer || !challenger) return;
@@ -187,7 +191,7 @@ export class CoupGame implements IGame {
 
         if (claimedPlayer.influence.includes(requiredCard)) {
             // Claimed player wins → challenger loses influence
-            this.loseInfluence(state, challengerId);
+            this.loseInfluence(roomId, state, challengerId);
             // Replace revealed card
             claimedPlayer.influence = claimedPlayer.influence.filter(c => c !== requiredCard);
             state.deck.push(requiredCard);
@@ -195,7 +199,7 @@ export class CoupGame implements IGame {
             claimedPlayer.influence.push(state.deck.pop()!);
         } else {
             // Claimed player loses influence
-            this.loseInfluence(state, claimedPlayerId);
+            this.loseInfluence(roomId, state, claimedPlayerId);
             // Action is canceled
             state.pendingAction = undefined;
         }
@@ -211,7 +215,7 @@ export class CoupGame implements IGame {
         }
     }
 
-    private resolvePendingAction(state: CoupGameState) {
+    private resolvePendingAction(roomId: string, state: CoupGameState) {
         const action = state.pendingAction;
         if (!action) return;
         const from = state.players.find(p => p.playerId === action.fromPlayerId);
@@ -226,7 +230,7 @@ export class CoupGame implements IGame {
                 from.coins += 3;
                 break;
             case "ASSASSINATE":
-                this.loseInfluence(state, to!.playerId);
+                this.loseInfluence(roomId, state, to!.playerId);
                 break;
             case "STEAL":
                 const stolen = Math.min(2, to!.coins);
@@ -247,17 +251,48 @@ export class CoupGame implements IGame {
 
 
 
-    private loseInfluence(state: CoupGameState, targetId: string) {
-        const target = state.players.find(p => p.playerId === targetId);
-        if (!target) return;
-        if (target.influence.length > 0) {
+    private loseInfluence(roomId: string, state: CoupGameState, targetId: string) {
+        const target = state.players.find((p) => p.playerId === targetId);
+        if (!target || !target.isAlive) return;
+
+        if (target.influence.length === 1) {
+            // auto-lose last card
             const lostCard = target.influence.pop()!;
             target.revealedCards.push(lostCard);
+        } else if (target.influence.length > 1) {
+            // ask client which card to lose
+            this.onEvent?.(roomId, "coup:chooseCardToLose", {
+                playerId: targetId,
+                cards: target.influence,
+            });
+            return; // wait for client response
         }
+
         if (target.influence.length === 0) {
             target.isAlive = false;
             this.checkWinner(state);
         }
+    }
+    public loseCard(roomId: string, state: CoupGameState, playerId: string, chosenCard: CoupCard) {
+        console.log(`Player ${playerId} chose to lose card: ${chosenCard}`);
+        const player = state.players.find((p) => p.playerId === playerId);
+        if (!player) return;
+
+        if (!player.influence.includes(chosenCard)) {
+            console.warn("Invalid card choice", chosenCard);
+            return;
+        }
+
+        // remove chosen card
+        player.influence = player.influence.filter((c) => c !== chosenCard);
+        player.revealedCards.push(chosenCard);
+
+        if (player.influence.length === 0) {
+            player.isAlive = false;
+            this.checkWinner(state);
+        }
+
+        this.advanceTurn(state);
     }
 
     private advanceTurn(state: CoupGameState) {
@@ -268,9 +303,10 @@ export class CoupGame implements IGame {
     }
 
     private checkWinner(state: CoupGameState) {
+        console.log("Checking for winner...", state);
         const alivePlayers = state.players.filter(p => p.isAlive);
         if (alivePlayers.length === 1) {
-            state.winnerId = alivePlayers[0].playerId;
+            state.winner = alivePlayers[0].playerId;
         }
     }
 }

@@ -4,13 +4,14 @@ import { useParams } from "react-router-dom";
 import { useCoupGame } from "./hooks/useCoupGame";
 import { GameBoard3D } from "./components/GameBoard3D";
 import { ResponsiveActionPanel } from "./components/ResponsiveActionPanel";
-import WinnerBanner from "./components/WinnerBanner";
+// import WinnerBanner from "./components/WinnerBanner";
 import { Enhanced3DStyles } from "./styles/Enhanced3DStyles";
 import {
   type CoupPlayerExtended,
   type InfluenceCard,
   InfluenceType,
 } from "./types/cards.types";
+import LoseCardModal from "./components/LoseCardModal";
 
 /**
  * CoupUI3D - Enhanced 3D immersive Coup game interface
@@ -40,16 +41,21 @@ export default function CoupUI3D(): JSX.Element {
     error,
     selectedTarget,
     animateCoin,
+    showLoseModal,
+    cardsToChoose,
     setSelectedTarget,
     onActionClick,
     onBlock,
     onChallenge,
     onResolve,
+    loseCardChoice,
   } = useCoupGame(roomId);
 
   const [transformedPlayers, setTransformedPlayers] = useState<
     CoupPlayerExtended[]
   >([]);
+
+  const [winner, setWinner] = useState<string | null>(null);
 
   // Handle device orientation for mobile optimization
   useEffect(() => {
@@ -100,55 +106,23 @@ export default function CoupUI3D(): JSX.Element {
       console.log(
         "Transforming players with influences",
         playersWithInfluences,
+        state,
       );
       setTransformedPlayers([...playersWithInfluences]);
     }
   }, [state, currentPlayer.playerId]);
 
-  // Transform players to extended format with mock influence data
-  //   const transformedPlayers: CoupPlayerExtended[] =
-  //     state?.players.map((player, index) => ({
-  //       ...player,
-  //       position: index,
-  //       influences:
-  //         player.influence?.map((influence) =>
-  //           generateInfluences(
-  //             player.playerId,
-  //             currentPlayer.playerId === player.playerId,
-  //             influence,
-  //           ),
-  //         ) ||
-  //         generateMockInfluences(
-  //           player.playerId,
-  //           currentPlayer.playerId === player.playerId,
-  //         ),
-  //     })) || [];
-
-  const winner = state?.winner
-    ? transformedPlayers.find((p) => p.playerId === state.winner)
-    : null;
-
-  // Generate mock influences for demonstration (in real game, this comes from backend)
-  function generateMockInfluences(
-    playerId: string,
-    isCurrentPlayer: boolean,
-  ): any[] {
-    const influences = [InfluenceType.DUKE, InfluenceType.CAPTAIN];
-    const playerInfluences = influences.map((type, index) => ({
-      id: `${playerId}-${index}`,
-      type,
-      isRevealed: isCurrentPlayer ? false : false, // Only show player's own cards
-      isLost: false,
-    }));
-
-    // Simulate lost influences for eliminated players
-    const player = state?.players.find((p) => p.playerId === playerId);
-    if (!player?.isAlive) {
-      playerInfluences.forEach((inf) => (inf.isLost = true));
+  useEffect(() => {
+    if (state?.winner) {
+      console.log("Setting winner based on state", state.winner);
+      const winnerPlayer = transformedPlayers.find(
+        (p) => p.playerId === state.winner,
+      );
+      if (winnerPlayer) {
+        setWinner(winnerPlayer.playerId);
+      }
     }
-
-    return playerInfluences;
-  }
+  }, [state?.winner, transformedPlayers]);
 
   // Generate influences for demonstration
   function generateInfluences(
@@ -262,76 +236,80 @@ export default function CoupUI3D(): JSX.Element {
 
         {/* Main Game Layout */}
         <div className="relative z-10 min-h-screen">
-          {/* Game Board Area */}
-          <div
-            className={`${
-              deviceOrientation === "portrait" ? "pb-80" : "pb-40"
-            } lg:pb-0`}>
-            <div className="container mx-auto px-4 py-4 lg:py-8">
-              {/* Error Display */}
-              {error && (
-                <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-red-900/90 backdrop-blur-sm border border-red-500/50 rounded-lg px-4 py-2 text-red-200 text-sm shadow-hard-3d animate-pulse">
-                  ⚠️ {error}
-                </div>
-              )}
+          {/* Winner Celebration */}
+          {winner && (
+            <div className="winner-celebration-3d">
+              <WinnerBanner state={state} />
+            </div>
+          )}
+          <>
+            {/* LoseCard Modal */}
+            {showLoseModal && (
+              <LoseCardModal cards={cardsToChoose} onSelect={loseCardChoice} />
+            )}
+            {/* Game Board Area */}
+            <div
+              className={`${
+                deviceOrientation === "portrait" ? "pb-80" : "pb-40"
+              } lg:pb-0`}>
+              <div className="container mx-auto px-4 py-4 lg:py-8">
+                {/* Error Display */}
+                {error && (
+                  <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-red-900/90 backdrop-blur-sm border border-red-500/50 rounded-lg px-4 py-2 text-red-200 text-sm shadow-hard-3d animate-pulse">
+                    ⚠️ {error}
+                  </div>
+                )}
 
-              {/* 3D Game Board */}
-              <GameBoard3D
-                players={transformedPlayers}
-                currentTurnPlayerId={state.currentTurnPlayerId}
-                currentPlayerId={currentPlayer.playerId}
-                animateCoin={animateCoin}
-              />
+                {/* 3D Game Board */}
+                <GameBoard3D
+                  players={transformedPlayers}
+                  currentTurnPlayerId={state.currentTurnPlayerId}
+                  currentPlayerId={currentPlayer.playerId}
+                  animateCoin={animateCoin}
+                />
 
-              {/* Turn Indicator (Mobile) */}
-              <div className="lg:hidden mt-4 text-center">
-                <div className="inline-block bg-black/60 backdrop-blur-sm rounded-full px-4 py-2 text-white">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
-                    <span className="text-sm font-medium">
-                      {
-                        transformedPlayers.find(
-                          (p) => p.playerId === state.currentTurnPlayerId,
-                        )?.name
-                      }
-                      's Turn
-                    </span>
+                {/* Turn Indicator (Mobile) */}
+                <div className="lg:hidden mt-4 text-center">
+                  <div className="inline-block bg-black/60 backdrop-blur-sm rounded-full px-4 py-2 text-white">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
+                      <span className="text-sm font-medium">
+                        {
+                          transformedPlayers.find(
+                            (p) => p.playerId === state.currentTurnPlayerId,
+                          )?.name
+                        }
+                        's Turn
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-
-          {/* Responsive Action Panel */}
-          <ResponsiveActionPanel
-            myPlayerState={
-              transformedPlayers.find(
-                (p) => p.playerId === currentPlayer.playerId,
-              ) || null
-            }
-            isMyTurn={isMyTurn}
-            selectedTarget={selectedTarget}
-            aliveOpponents={aliveOpponents.map(
-              (p) =>
-                transformedPlayers.find((tp) => tp.playerId === p.playerId) ||
-                (p as CoupPlayerExtended),
-            )}
-            pendingAction={state.pendingAction || null}
-            setSelectedTarget={setSelectedTarget}
-            onActionClick={onActionClick}
-            onBlock={onBlock}
-            onChallenge={onChallenge}
-            onResolve={onResolve}
-            players={transformedPlayers}
-          />
+            {/* Responsive Action Panel */}
+            <ResponsiveActionPanel
+              myPlayerState={
+                transformedPlayers.find(
+                  (p) => p.playerId === currentPlayer.playerId,
+                ) || null
+              }
+              isMyTurn={isMyTurn}
+              selectedTarget={selectedTarget}
+              aliveOpponents={aliveOpponents.map(
+                (p) =>
+                  transformedPlayers.find((tp) => tp.playerId === p.playerId) ||
+                  (p as CoupPlayerExtended),
+              )}
+              pendingAction={state.pendingAction || null}
+              setSelectedTarget={setSelectedTarget}
+              onActionClick={onActionClick}
+              onBlock={onBlock}
+              onChallenge={onChallenge}
+              onResolve={onResolve}
+              players={transformedPlayers}
+            />
+          </>
         </div>
-
-        {/* Winner Celebration */}
-        {winner && (
-          <div className="winner-celebration-3d">
-            <WinnerBanner state={state} />
-          </div>
-        )}
 
         {/* Global Coin Animation Fallback */}
         {animateCoin && (

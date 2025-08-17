@@ -12,10 +12,17 @@
     "@react-three/drei": "^9.122.0",
     "@react-three/fiber": "^8.15.16",
     "axios": "^1.11.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.23.12",
+    "lucide-react": "^0.539.0",
+    "path": "^0.12.7",
     "react": "^18.3.1",
+    "react-confetti": "^6.4.0",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.8.0",
     "socket.io-client": "^4.8.1",
+    "tailwind-variants": "^2.1.0",
     "three": "^0.179.1"
   },
   "devDependencies": {
@@ -25,7 +32,7 @@
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.41",
-    "tailwindcss": "^3.4.10",
+    "tailwindcss": "^3.4.17",
     "typescript": "^5.5.4",
     "vite": "^5.4.1"
   }

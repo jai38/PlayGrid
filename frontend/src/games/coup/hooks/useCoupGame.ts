@@ -21,12 +21,15 @@ interface UseCoupGameReturn {
     error: string;
     selectedTarget: string | null;
     animateCoin: CoinAnimation | null;
+    showLoseModal: boolean;
+    cardsToChoose: string[];
     setSelectedTarget: (target: string | null) => void;
     sendAction: (type: string, payload?: any) => void;
     onActionClick: (type: string) => void;
     onBlock: () => void;
     onChallenge: () => void;
     onResolve: () => void;
+    loseCardChoice: (card: string) => void;
 }
 
 export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
@@ -43,6 +46,8 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
     const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
     const [animateCoin, setAnimateCoin] = useState<CoinAnimation | null>(null);
     const lastCoinsRef = useRef<Record<string, number>>({});
+    const [showLoseModal, setShowLoseModal] = useState(false);
+    const [cardsToChoose, setCardsToChoose] = useState<string[]>([]);
 
     /* -------------------- Socket Event Handlers -------------------- */
     const setupEvents = useCallback((socket: Socket) => {
@@ -91,17 +96,23 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
             setError('Player reconnected');
             setTimeout(() => setError(''), 2000);
         };
+        const handleChooseCardToLose = (data: any) => {
+            setShowLoseModal(currentPlayer.playerId === data.playerId);
+            setCardsToChoose(data.cards);
+        };
 
         socket.on('game:state', handleGameState);
         socket.on('errorMessage', handleError);
         socket.on('player:disconnected', handlePlayerDisconnected);
         socket.on('player:reconnected', handlePlayerReconnected);
+        socket.on("coup:chooseCardToLose", handleChooseCardToLose);
 
         return () => {
             socket.off('game:state', handleGameState);
             socket.off('errorMessage', handleError);
             socket.off('player:disconnected', handlePlayerDisconnected);
             socket.off('player:reconnected', handlePlayerReconnected);
+            socket.off("coup:chooseCardToLose", handleChooseCardToLose);
         };
     }, []);
 
@@ -113,6 +124,14 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
             socket.emit('game:join', { roomId, gameId: 'coup' });
         }
     }, [socket, roomId, currentPlayer.playerId]);
+
+    const loseCardChoice = (card: string) => {
+        console.log(`Player ${currentPlayer.playerId} chose to lose card: ${card}`);
+        if (socket && roomId && card && currentPlayer) {
+            socket.emit("coup:loseCardChoice", { roomId, action: { type: "LOSE_CARD", playerId: currentPlayer.playerId, payload: { card } } });
+            setShowLoseModal(false);
+        }
+    };
 
     // Clear coin animation after duration
     useEffect(() => {
@@ -224,11 +243,14 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
         error,
         selectedTarget,
         animateCoin,
+        showLoseModal,
+        cardsToChoose,
         setSelectedTarget,
         sendAction,
         onActionClick,
         onBlock,
         onChallenge,
         onResolve,
+        loseCardChoice,
     };
 };

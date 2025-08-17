@@ -1,0 +1,11 @@
+{
+  "dependencies": {
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.23.12",
+    "lucide-react": "^0.539.0",
+    "react-confetti": "^6.4.0",
+    "tailwind-variants": "^2.1.0",
+    "tailwindcss": "^4.1.12"
+  }
+}

@@ -10,6 +10,7 @@ export interface GameState {
     // generic shape - each game can extend this
     players: Player[];
     currentTurnPlayerId: string;
+    winner?: string; // playerId of the winner
     // ...game specific state goes here
 }
 

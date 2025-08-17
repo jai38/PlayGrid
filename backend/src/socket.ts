@@ -97,11 +97,20 @@ function sanitizeStateForPlayer(state: any, playerId: string): any {
                     )
                 })
             };
-        })
+        }),
+        winner: getWinner(state)
     };
 
     sanitizationCache.set(cacheKey, { state: sanitized, timestamp: Date.now() });
+    console.log("Sanitized state for player", playerId, ":", sanitized);
     return sanitized;
+}
+function getWinner(state: any): string | undefined {
+    const alivePlayers = state.players.filter((p: any) => p.isAlive);
+    if (alivePlayers.length === 1) {
+        return alivePlayers[0].playerId;
+    }
+    return undefined;
 }
 
 function sanitizeStateForAll(state: any): any {
@@ -141,7 +150,11 @@ setInterval(() => {
 
 export function initSocket(io: Server) {
     const gameManager = new GameManager(io);
-    gameManager.registerGame(new CoupGame());
+    const coup = new CoupGame();
+    gameManager.registerGame(coup);
+    coup.onEvent = (roomId: string | string[], event: any, payload: any) => {
+        io.to(roomId).emit(event, payload);
+    };
     // gameManager.registerGame(new MonopolyGame());
 
     // Track connected sockets for cleanup
@@ -150,6 +163,7 @@ export function initSocket(io: Server) {
     io.on("connection", (socket: Socket) => {
         console.log("Socket connected:", socket.id);
         connectedSockets.add(socket.id);
+
 
         // Send initial rooms data
         socket.emit("rooms:update", getPublicRoomsSummary());
@@ -463,6 +477,33 @@ export function initSocket(io: Server) {
             } catch (err) {
                 console.error("game:action error:", err);
                 socket.emit("game:error", { error: "Failed to handle game action" });
+            }
+        });
+
+        socket.on("coup:loseCardChoice", (payload: GameActionPayload, ack?: SocketAck) => {
+            try {
+                const { roomId, action } = payload;
+                gameManager.handleAction(roomId, action);
+                const updatedState = gameManager.getGameState(roomId);
+
+                if (updatedState && updatedState.players) {
+                    // Emit sanitized state to each player individually
+                    updatedState.players.forEach((p: any) => {
+                        const targetSocket = p.socketId || p.playerId;
+                        if (targetSocket) {
+                            io.to(targetSocket).emit(
+                                "game:state",
+                                sanitizeStateForPlayer(updatedState, p.playerId)
+                            );
+                        }
+                    });
+                }
+                io.to(roomId).emit("game:stateUpdate", sanitizeStateForAll(updatedState));
+                safeAck(ack, { success: true });
+            } catch (err) {
+                console.error("coup:loseCardChoice error:", err);
+                emitError(socket, "Failed to process lose card choice");
+                safeAck(ack, { success: false, error: "Failed to process lose card choice" });
             }
         });
 
