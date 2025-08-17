@@ -67,7 +67,8 @@ describe("CoupGame", () => {
         expect(state.pendingAction).toEqual({
             type: "ASSASSINATE",
             fromPlayerId: "P1",
-            toPlayerId: "P2"
+            toPlayerId: "P2",
+            respondedPlayers: []
         });
     });
 
@@ -77,7 +78,8 @@ describe("CoupGame", () => {
         expect(state.pendingAction).toEqual({
             type: "STEAL",
             fromPlayerId: "P1",
-            toPlayerId: "P2"
+            toPlayerId: "P2",
+            respondedPlayers: []
         });
     });
 
@@ -86,7 +88,8 @@ describe("CoupGame", () => {
         game.handleAction("room1", action, state);
         expect(state.pendingAction).toEqual({
             type: "EXCHANGE",
-            fromPlayerId: "P1"
+            fromPlayerId: "P1",
+            respondedPlayers: []
         });
     });
 
@@ -112,11 +115,18 @@ describe("CoupGame", () => {
         expect(state.pendingAction).toBeUndefined(); // action canceled
     });
 
-    test("RESOLVE_ACTION should process pendingAction", () => {
-        state.pendingAction = { type: "TAX", fromPlayerId: "P1" };
+    test("RESOLVE_ACTION should process pendingAction when all players respond", () => {
+        state.pendingAction = { type: "TAX", fromPlayerId: "P1", respondedPlayers: [] };
         const beforeCoins = state.players[0].coins;
-        game.handleAction("room1", { type: "RESOLVE_ACTION", playerId: "P1" }, state);
-        expect(state.players[0].coins).toBe(beforeCoins + 3);
+        
+        // P2 resolves (doesn't challenge)
+        game.handleAction("room1", { type: "RESOLVE_ACTION", playerId: "P2" }, state);
+        expect(state.pendingAction?.respondedPlayers).toContain("P2");
+        expect(state.players[0].coins).toBe(beforeCoins); // Not resolved yet
+        
+        // P3 resolves (doesn't challenge) - now all have responded
+        game.handleAction("room1", { type: "RESOLVE_ACTION", playerId: "P3" }, state);
+        expect(state.players[0].coins).toBe(beforeCoins + 3); // Now resolved
         expect(state.pendingAction).toBeUndefined();
     });
 
@@ -174,6 +184,71 @@ describe("CoupGame", () => {
         // Should remain unchanged
         expect(state.players[0].influence).toEqual(originalInfluence);
         expect(state.exchangeCards).toBeDefined(); // Still pending
+    });
+
+    test("CHOOSE_BLOCK_CARD should set blocking card for STEAL", () => {
+        // Set up pending STEAL action
+        state.pendingAction = { 
+            type: "STEAL", 
+            fromPlayerId: "P1", 
+            toPlayerId: "P2",
+            respondedPlayers: []
+        };
+        
+        const action: GameAction = { 
+            type: "CHOOSE_BLOCK_CARD", 
+            playerId: "P3", 
+            payload: { blockingCard: "Captain" } 
+        };
+        
+        game.handleAction("room1", action, state);
+        
+        expect(state.pendingAction?.blockedBy).toBe("P3");
+        expect(state.pendingAction?.blockingCard).toBe("Captain");
+        expect(state.pendingAction?.respondedPlayers).toEqual([]);
+    });
+
+    test("Enhanced Challenge system should track responses properly", () => {
+        // Set up pending TAX action
+        state.pendingAction = { 
+            type: "TAX", 
+            fromPlayerId: "P1",
+            respondedPlayers: []
+        };
+        
+        // P2 resolves (doesn't challenge)
+        game.handleAction("room1", { type: "RESOLVE_ACTION", playerId: "P2" }, state);
+        expect(state.pendingAction?.respondedPlayers).toContain("P2");
+        expect(state.pendingAction).toBeDefined(); // Still pending
+        
+        // P3 challenges
+        state.players[0].influence = ["Captain", "Ambassador"]; // P1 doesn't have Duke
+        game.handleAction("room1", { type: "CHALLENGE", playerId: "P3", payload: { targetId: "P1" } }, state);
+        
+        // Action should be canceled due to failed challenge
+        expect(state.pendingAction).toBeUndefined();
+        expect(state.players[0].influence.length).toBe(1); // P1 lost influence
+    });
+
+    test("Block challenge should work correctly", () => {
+        // Set up blocked action
+        state.pendingAction = { 
+            type: "FOREIGN_AID", 
+            fromPlayerId: "P1",
+            blockedBy: "P2",
+            blockingCard: "Duke",
+            respondedPlayers: []
+        };
+        
+        state.players[1].influence = ["Captain", "Ambassador"]; // P2 doesn't have Duke
+        
+        // P3 challenges the block
+        game.handleAction("room1", { type: "CHALLENGE", playerId: "P3", payload: { targetId: "P2" } }, state);
+        
+        // Block should fail, action should continue
+        expect(state.pendingAction?.blockedBy).toBeUndefined();
+        expect(state.pendingAction?.blockingCard).toBeUndefined();
+        expect(state.players[1].influence.length).toBe(1); // P2 lost influence
     });
 
     test("Game should detect winner", () => {

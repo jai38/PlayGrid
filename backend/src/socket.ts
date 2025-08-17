@@ -485,6 +485,33 @@ export function initSocket(io: Server) {
             }
         });
 
+        socket.on("coup:blockCardChoice", (payload: GameActionPayload, ack?: SocketAck) => {
+            try {
+                const { roomId, action } = payload;
+                gameManager.handleAction(roomId, action);
+                const updatedState = gameManager.getGameState(roomId);
+
+                if (updatedState && updatedState.players) {
+                    // Emit sanitized state to each player individually
+                    updatedState.players.forEach((p: any) => {
+                        const targetSocket = p.socketId || p.playerId;
+                        if (targetSocket) {
+                            io.to(targetSocket).emit(
+                                "game:state",
+                                sanitizeStateForPlayer(updatedState, p.playerId)
+                            );
+                        }
+                    });
+                }
+                io.to(roomId).emit("game:stateUpdate", sanitizeStateForAll(updatedState));
+                safeAck(ack, { success: true });
+            } catch (err) {
+                console.error("coup:blockCardChoice error:", err);
+                emitError(socket, "Failed to process block card choice");
+                safeAck(ack, { success: false, error: "Failed to process block card choice" });
+            }
+        });
+
         socket.on("disconnect", (reason) => {
             console.log("Socket disconnected:", socket.id, reason);
             connectedSockets.delete(socket.id);
