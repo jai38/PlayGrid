@@ -2,11 +2,9 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useCoupGame } from "./hooks/useCoupGame";
-import { GameBoard3D } from "./components/GameBoard3D";
+import { SimpleGameBoard } from "./components/SimpleGameBoard";
 import { ResponsiveActionPanel } from "./components/ResponsiveActionPanel";
 import { ActionLogPanel } from "./components/ActionLogPanel";
-// import WinnerBanner from "./components/WinnerBanner";
-import { Enhanced3DStyles } from "./styles/Enhanced3DStyles";
 import {
   type CoupPlayerExtended,
   type InfluenceCard,
@@ -17,15 +15,16 @@ import ExchangeCardModal from "./components/ExchangeCardModal";
 import BlockCardModal from "./components/BlockCardModal";
 
 /**
- * CoupUI3D - Enhanced 3D immersive Coup game interface
+ * CoupUI3D - Simplified Coup game interface
  *
  * Features:
- * - Full 3D perspective game board with proper depth
- * - Individual influence cards with beautiful SVG designs
- * - Responsive design that works on mobile, tablet, and desktop
- * - Smooth animations and transitions
- * - Accessibility features and reduced motion support
- * - Performance optimized with GPU acceleration
+ * - Clean, minimal design with clear sections
+ * - Player area showing name, coins, and card count
+ * - Single compact action panel with only relevant actions
+ * - Game log panel with compact feed
+ * - Turn indicator clearly highlighting whose turn it is
+ * - Modal popups for special decisions
+ * - Mobile-friendly responsive design
  */
 export default function CoupUI3D(): JSX.Element {
   const { roomId } = useParams<{ roomId: string }>();
@@ -190,33 +189,16 @@ export default function CoupUI3D(): JSX.Element {
         };
     }
   }
-  // Loading state with 3D spinner
+  // Loading state
   if (!state || isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-900 to-black flex items-center justify-center">
-        <style dangerouslySetInnerHTML={{ __html: Enhanced3DStyles }} />
-        <div className="text-center text-white">
-          <div className="loading-3d w-20 h-20 border-4 border-blue-500/30 border-t-blue-500 rounded-full mx-auto mb-6"></div>
-          <div className="text-3d-large font-bold mb-2">COUP</div>
-          <div className="text-3d-medium text-blue-300 mb-4">
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center">
+        <div className="text-center p-8 bg-slate-800/60 backdrop-blur-sm rounded-xl border border-slate-600">
+          <div className="text-2xl font-bold mb-4 text-white">COUP</div>
+          <div className="text-lg text-blue-300 mb-4">
             Connecting to game...
           </div>
-          <div className="text-3d-small text-gray-400">Room: {roomId}</div>
-
-          {/* Loading particles */}
-          <div className="atmosphere-particles">
-            {Array.from({ length: 20 }).map((_, i) => (
-              <div
-                key={i}
-                className="particle"
-                style={{
-                  left: `${Math.random() * 100}%`,
-                  animationDelay: `${Math.random() * 8}s`,
-                  animationDuration: `${6 + Math.random() * 4}s`,
-                }}
-              />
-            ))}
-          </div>
+          <div className="text-sm text-gray-400">Room: {roomId}</div>
         </div>
       </div>
     );
@@ -347,6 +329,7 @@ export default function CoupUI3D(): JSX.Element {
               onChallenge={onChallenge}
               onResolve={onResolve}
               players={transformedPlayers}
+              currentTurnPlayerId={state.currentTurnPlayerId}
             />
           </>
         </div>
