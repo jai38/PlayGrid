@@ -31,12 +31,24 @@ export class CoupGame implements IGame {
     gameId = "coup";
     onEvent: ((roomId: string | string[], event: any, payload: any) => void) | undefined;
 
+    // Game constants
+    private static readonly STARTING_COINS = 2;
+    private static readonly CARDS_PER_PLAYER = 2;
+    private static readonly CARDS_PER_TYPE = 3;
+    private static readonly COUP_COST = 7;
+    private static readonly ASSASSINATE_COST = 3;
+    private static readonly FORCED_COUP_THRESHOLD = 10;
+    private static readonly INCOME_AMOUNT = 1;
+    private static readonly FOREIGN_AID_AMOUNT = 2;
+    private static readonly TAX_AMOUNT = 3;
+    private static readonly STEAL_AMOUNT = 2;
+
     // Create full deck (3 of each card)
     private createDeck(): CoupCard[] {
         const cards: CoupCard[] = [];
         const cardTypes: CoupCard[] = ["Duke", "Assassin", "Captain", "Ambassador", "Contessa"];
         for (const type of cardTypes) {
-            for (let i = 0; i < 3; i++) {
+            for (let i = 0; i < CoupGame.CARDS_PER_TYPE; i++) {
                 cards.push(type);
             }
         }
@@ -44,16 +56,21 @@ export class CoupGame implements IGame {
     }
 
     private shuffle<T>(array: T[]): T[] {
-        return [...array].sort(() => Math.random() - 0.5);
+        const shuffled = [...array];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        return shuffled;
     }
 
     initGame(roomId: string, players: Player[]): CoupGameState {
         let deck = this.createDeck();
         const coupPlayers: CoupPlayer[] = players.map((p) => {
-            const influence = [deck.pop()!, deck.pop()!]; // deal 2 cards
+            const influence = [deck.pop()!, deck.pop()!]; // deal cards per player
             return {
                 ...p,
-                coins: 2,
+                coins: CoupGame.STARTING_COINS,
                 influence,
                 revealedCards: [],
                 isAlive: true,
@@ -63,7 +80,7 @@ export class CoupGame implements IGame {
         return {
             players: coupPlayers,
             deck,
-            currentTurnPlayerId: coupPlayers[0].playerId, // first player
+            currentTurnPlayerId: coupPlayers[0].playerId,
         };
     }
     validateAction(action: GameAction, state: CoupGameState): boolean {
@@ -75,8 +92,8 @@ export class CoupGame implements IGame {
             return false;
         }
 
-        // Must coup if 10+ coins
-        if (player.coins >= 10 && action.type !== "COUP") {
+        // Must coup if at forced coup threshold
+        if (player.coins >= CoupGame.FORCED_COUP_THRESHOLD && action.type !== "COUP") {
             return false;
         }
 
@@ -89,10 +106,10 @@ export class CoupGame implements IGame {
                 return true;
 
             case "COUP":
-                return player.coins >= 7 && this.isValidTarget(action.payload?.targetId, state, player.playerId);
+                return player.coins >= CoupGame.COUP_COST && this.isValidTarget(action.payload?.targetId, state, player.playerId);
 
             case "ASSASSINATE":
-                return player.coins >= 3 && this.isValidTarget(action.payload?.targetId, state, player.playerId);
+                return player.coins >= CoupGame.ASSASSINATE_COST && this.isValidTarget(action.payload?.targetId, state, player.playerId);
 
             case "STEAL":
                 return this.isValidTarget(action.payload?.targetId, state, player.playerId);
@@ -119,7 +136,7 @@ export class CoupGame implements IGame {
 
         switch (action.type) {
             case "INCOME":
-                player.coins += 1;
+                player.coins += CoupGame.INCOME_AMOUNT;
                 break;
 
             case "FOREIGN_AID":
@@ -133,12 +150,12 @@ export class CoupGame implements IGame {
                 break;
 
             case "COUP":
-                player.coins -= 7;
+                player.coins -= CoupGame.COUP_COST;
                 this.loseInfluence(roomId, state, action.payload.targetId);
                 break;
 
             case "ASSASSINATE":
-                player.coins -= 3;
+                player.coins -= CoupGame.ASSASSINATE_COST;
                 state.pendingAction = { type: "ASSASSINATE", fromPlayerId: player.playerId, toPlayerId: action.payload.targetId };
                 break;
 
@@ -172,9 +189,11 @@ export class CoupGame implements IGame {
                 break;
             case "LOSE_CARD":
                 this.loseCard(roomId, state, action.playerId, action.payload.card);
+                break;
         }
 
-        if (action.type !== "CHALLENGE" && action.type !== "BLOCK" && action.type !== "RESOLVE_ACTION") {
+        // Only advance turn for primary actions, not for response actions or card loss
+        if (!["CHALLENGE", "BLOCK", "RESOLVE_ACTION", "LOSE_CARD"].includes(action.type)) {
             this.advanceTurn(state);
         }
 
@@ -224,25 +243,25 @@ export class CoupGame implements IGame {
 
         switch (action.type) {
             case "FOREIGN_AID":
-                from.coins += 2;
+                from.coins += CoupGame.FOREIGN_AID_AMOUNT;
                 break;
             case "TAX":
-                from.coins += 3;
+                from.coins += CoupGame.TAX_AMOUNT;
                 break;
             case "ASSASSINATE":
                 this.loseInfluence(roomId, state, to!.playerId);
                 break;
             case "STEAL":
-                const stolen = Math.min(2, to!.coins);
+                const stolen = Math.min(CoupGame.STEAL_AMOUNT, to!.coins);
                 to!.coins -= stolen;
                 from.coins += stolen;
                 break;
             case "EXCHANGE":
                 const drawn = [state.deck.pop()!, state.deck.pop()!];
                 const combined = [...drawn, ...from.influence];
-                // For now, auto-pick first two → later add choice via frontend
-                from.influence = combined.slice(0, 2);
-                state.deck.push(...combined.slice(2));
+                // For now, auto-pick first cards → later add choice via frontend
+                from.influence = combined.slice(0, CoupGame.CARDS_PER_PLAYER);
+                state.deck.push(...combined.slice(CoupGame.CARDS_PER_PLAYER));
                 state.deck = this.shuffle(state.deck);
                 break;
         }
@@ -260,12 +279,18 @@ export class CoupGame implements IGame {
             const lostCard = target.influence.pop()!;
             target.revealedCards.push(lostCard);
         } else if (target.influence.length > 1) {
-            // ask client which card to lose
-            this.onEvent?.(roomId, "coup:chooseCardToLose", {
-                playerId: targetId,
-                cards: target.influence,
-            });
-            return; // wait for client response
+            if (this.onEvent) {
+                // In game mode: ask client which card to lose
+                this.onEvent(roomId, "coup:chooseCardToLose", {
+                    playerId: targetId,
+                    cards: target.influence,
+                });
+                return; // wait for client response
+            } else {
+                // In test mode: auto-lose first card
+                const lostCard = target.influence.shift()!;
+                target.revealedCards.push(lostCard);
+            }
         }
 
         if (target.influence.length === 0) {

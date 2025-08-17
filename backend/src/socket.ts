@@ -10,8 +10,8 @@ import {
     removePlayerById
 } from "./rooms";
 import { GameManager } from "./games/GameManager";
-import { MonopolyGame } from "./games/monopoly/MonopolyGame";
 import { CoupGame } from "./games/coup/CoupGame";
+import { GameAction } from "./games/IGame";
 
 // Improved type definitions
 interface CreateRoomPayload {
@@ -39,11 +39,7 @@ interface ChatPayload {
 interface GameActionPayload {
     roomId: string;
     gameId: string;
-    action: {
-        type: string;
-        payload?: any;
-        playerId: string;
-    };
+    action: GameAction;
 }
 
 interface SocketAck<T = any> {
@@ -72,18 +68,8 @@ function emitRoomUpdate(io: Server): void {
 }
 emitRoomUpdate.timeoutId = null as NodeJS.Timeout | null;
 
-// State sanitization cache for performance
-const sanitizationCache = new Map<string, { state: any; timestamp: number }>();
-const CACHE_TTL = 1000; // 1 second cache
-
+// Simplified state sanitization without expensive caching
 function sanitizeStateForPlayer(state: any, playerId: string): any {
-    const cacheKey = `${JSON.stringify(state)}_${playerId}`;
-    const cached = sanitizationCache.get(cacheKey);
-
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-        return cached.state;
-    }
-
     const sanitized = {
         ...state,
         players: state.players.map((p: any) => {
@@ -92,61 +78,27 @@ function sanitizeStateForPlayer(state: any, playerId: string): any {
                 ...p,
                 // Only sanitize influence if it exists (Coup-specific)
                 ...(p.influence && {
-                    influence: p.influence.map((card: any) =>
-                        !card.revealed ? card : "UNKNOWN"
-                    )
+                    influence: p.influence.map(() => "UNKNOWN") // Hide all other players' cards
                 })
             };
-        }),
-        winner: getWinner(state)
+        })
     };
 
-    sanitizationCache.set(cacheKey, { state: sanitized, timestamp: Date.now() });
-    console.log("Sanitized state for player", playerId, ":", sanitized);
     return sanitized;
-}
-function getWinner(state: any): string | undefined {
-    const alivePlayers = state.players.filter((p: any) => p.isAlive);
-    if (alivePlayers.length === 1) {
-        return alivePlayers[0].playerId;
-    }
-    return undefined;
 }
 
 function sanitizeStateForAll(state: any): any {
-    const cacheKey = `all_${JSON.stringify(state)}`;
-    const cached = sanitizationCache.get(cacheKey);
-
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-        return cached.state;
-    }
-
-    const sanitized = {
+    return {
         ...state,
         players: state.players.map((p: any) => ({
             ...p,
             // Only sanitize influence if it exists (Coup-specific)
             ...(p.influence && {
-                influence: p.influence.map((card: any) =>
-                    card.revealed ? card : "UNKNOWN"
-                )
+                influence: p.influence.map(() => "UNKNOWN") // Hide all players' cards for public view
             })
         }))
     };
-
-    sanitizationCache.set(cacheKey, { state: sanitized, timestamp: Date.now() });
-    return sanitized;
 }
-
-// Cleanup cache periodically
-setInterval(() => {
-    const now = Date.now();
-    for (const [key, value] of sanitizationCache.entries()) {
-        if (now - value.timestamp > CACHE_TTL) {
-            sanitizationCache.delete(key);
-        }
-    }
-}, CACHE_TTL * 2);
 
 export function initSocket(io: Server) {
     const gameManager = new GameManager(io);
@@ -155,7 +107,6 @@ export function initSocket(io: Server) {
     coup.onEvent = (roomId: string | string[], event: any, payload: any) => {
         io.to(roomId).emit(event, payload);
     };
-    // gameManager.registerGame(new MonopolyGame());
 
     // Track connected sockets for cleanup
     const connectedSockets = new Set<string>();

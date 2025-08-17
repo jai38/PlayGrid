@@ -1,4 +1,4 @@
-import type { ActionPayload, CoupGameState } from "../types";
+import type { ActionPayload } from "../types/coup.types";
 
 export default function ActionButtons({
   isMyTurn,

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { io, Socket } from "socket.io-client";
 import { setGlobalSocket } from "../services/socket";
 
@@ -21,14 +21,13 @@ export const useSocket = (onEvents?: (socket: Socket) => void) => {
                 forceNew: false
             });
 
-            // Add connection event listeners for debugging
+            // Add connection event listeners
             socketInstance.on("connect", () => {
                 console.log("Socket connected:", socketInstance.id);
             });
 
             socketInstance.on("disconnect", (reason) => {
                 console.log("Socket disconnected:", reason);
-                // Don't clear globalSocket on disconnect to allow reconnection
             });
 
             socketInstance.on("connect_error", (error) => {
@@ -40,35 +39,27 @@ export const useSocket = (onEvents?: (socket: Socket) => void) => {
             });
 
             globalSocket = socketInstance;
-            setGlobalSocket(socketInstance); // Update the services socket reference
+            setGlobalSocket(socketInstance);
         }
 
         setSocket(globalSocket);
 
         // Register events whenever onEvents changes
         if (globalSocket && onEvents) {
-            // Clear existing listeners to prevent duplicates
-            globalSocket.removeAllListeners();
             onEvents(globalSocket);
-            console.log("Socket events registered for socket:", globalSocket.id);
         }
-
-        // Clean up on unmount
-        return () => {
-            // Don't disconnect on unmount to maintain connection
-            // Only disconnect if component is actually unmounting
-        };
 
         // Add page unload listener to properly disconnect
         const handleBeforeUnload = () => {
             if (globalSocket) {
-                console.log("Page unloading, disconnecting socket");
                 globalSocket.disconnect();
                 globalSocket = null;
             }
         };
 
         window.addEventListener('beforeunload', handleBeforeUnload);
+        
+        // Cleanup function
         return () => {
             window.removeEventListener('beforeunload', handleBeforeUnload);
         };

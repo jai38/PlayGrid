@@ -124,7 +124,7 @@ describe("CoupGame", () => {
         const targetId = state.players[1].playerId;
         state.players[1].influence = ["Duke"];
         // Lose influence
-        (game as any).loseInfluence(state, targetId);
+        (game as any).loseInfluence("room1", state, targetId);
         expect(state.players[1].influence.length).toBe(0);
         expect(state.players[1].isAlive).toBe(false);
     });
@@ -133,6 +133,6 @@ describe("CoupGame", () => {
         state.players[1].isAlive = false;
         state.players[2].isAlive = false;
         (game as any).checkWinner(state);
-        expect(state.winnerId).toBe("P1");
+        expect(state.winner).toBe("P1");
     });
 });

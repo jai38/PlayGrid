@@ -86,3 +86,9 @@ export const ACTIONS_REQUIRING_TARGET = [
     ActionType.ASSASSINATE,
     ActionType.STEAL
 ];
+
+// Action payload interface
+export interface ActionPayload {
+    targetId?: string;
+    role?: string;
+}
