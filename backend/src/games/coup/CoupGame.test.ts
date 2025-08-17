@@ -133,6 +133,6 @@ describe("CoupGame", () => {
         state.players[1].isAlive = false;
         state.players[2].isAlive = false;
         (game as any).checkWinner(state);
-        expect(state.winnerId).toBe("P1");
+        expect(state.winner).toBe("P1");
     });
 });
