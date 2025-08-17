@@ -4,6 +4,7 @@ import { useParams } from "react-router-dom";
 import { useCoupGame } from "./hooks/useCoupGame";
 import { GameBoard3D } from "./components/GameBoard3D";
 import { ResponsiveActionPanel } from "./components/ResponsiveActionPanel";
+import { ActionLogPanel } from "./components/ActionLogPanel";
 // import WinnerBanner from "./components/WinnerBanner";
 import { Enhanced3DStyles } from "./styles/Enhanced3DStyles";
 import {
@@ -286,13 +287,26 @@ export default function CoupUI3D(): JSX.Element {
                   </div>
                 )}
 
-                {/* 3D Game Board */}
-                <GameBoard3D
-                  players={transformedPlayers}
-                  currentTurnPlayerId={state.currentTurnPlayerId}
-                  currentPlayerId={currentPlayer.playerId}
-                  animateCoin={animateCoin}
-                />
+                {/* Main Game Layout - Board and Log */}
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 lg:gap-6">
+                  {/* 3D Game Board */}
+                  <div className="lg:col-span-3">
+                    <GameBoard3D
+                      players={transformedPlayers}
+                      currentTurnPlayerId={state.currentTurnPlayerId}
+                      currentPlayerId={currentPlayer.playerId}
+                      animateCoin={animateCoin}
+                    />
+                  </div>
+
+                  {/* Action Log Panel */}
+                  <div className="lg:col-span-1">
+                    <ActionLogPanel 
+                      logs={state.actionLogs || []}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
 
                 {/* Turn Indicator (Mobile) */}
                 <div className="lg:hidden mt-4 text-center">

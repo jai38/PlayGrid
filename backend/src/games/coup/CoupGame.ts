@@ -5,6 +5,17 @@ import { Player } from "../../rooms";
 // Characters in Coup
 export type CoupCard = "Duke" | "Assassin" | "Captain" | "Ambassador" | "Contessa";
 
+// Action log entry for the game
+export interface ActionLogEntry {
+    id: string;
+    timestamp: number;
+    playerName: string;
+    action: string;
+    target?: string;
+    outcome: string;
+    turnNumber: number;
+}
+
 // Player-specific state
 interface CoupPlayer extends Player {
     coins: number;
@@ -18,6 +29,8 @@ export interface CoupGameState extends GameState {
     players: CoupPlayer[];
     deck: CoupCard[];
     currentTurnPlayerId: string;
+    turnNumber: number;
+    actionLogs: ActionLogEntry[];
     pendingAction?: {
         type: string;
         fromPlayerId: string;
@@ -71,6 +84,54 @@ export class CoupGame implements IGame {
         return shuffled;
     }
 
+    private getPlayerName(state: CoupGameState, playerId: string): string {
+        const player = state.players.find(p => p.playerId === playerId);
+        return player?.name || "Unknown Player";
+    }
+
+    private addActionLog(roomId: string, state: CoupGameState, playerName: string, action: string, target?: string, outcome: string = ""): void {
+        const logEntry: ActionLogEntry = {
+            id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            timestamp: Date.now(),
+            playerName,
+            action,
+            target,
+            outcome,
+            turnNumber: state.turnNumber
+        };
+
+        state.actionLogs.push(logEntry);
+
+        // Emit real-time log update
+        if (this.onEvent) {
+            this.onEvent(roomId, "coup:actionLog", {
+                logEntry,
+                allLogs: state.actionLogs
+            });
+        }
+    }
+
+    private addTurnEndLog(roomId: string, state: CoupGameState): void {
+        const logEntry: ActionLogEntry = {
+            id: `turn-end-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            timestamp: Date.now(),
+            playerName: "",
+            action: "TURN_END",
+            outcome: `--- End of Turn ${state.turnNumber} ---`,
+            turnNumber: state.turnNumber
+        };
+
+        state.actionLogs.push(logEntry);
+
+        // Emit real-time log update
+        if (this.onEvent) {
+            this.onEvent(roomId, "coup:actionLog", {
+                logEntry,
+                allLogs: state.actionLogs
+            });
+        }
+    }
+
     initGame(roomId: string, players: Player[]): CoupGameState {
         let deck = this.createDeck();
         const coupPlayers: CoupPlayer[] = players.map((p) => {
@@ -88,6 +149,8 @@ export class CoupGame implements IGame {
             players: coupPlayers,
             deck,
             currentTurnPlayerId: coupPlayers[0].playerId,
+            turnNumber: 1,
+            actionLogs: [],
         };
     }
     validateAction(action: GameAction, state: CoupGameState): boolean {
@@ -183,6 +246,7 @@ export class CoupGame implements IGame {
         switch (action.type) {
             case "INCOME":
                 player.coins += CoupGame.INCOME_AMOUNT;
+                this.addActionLog(roomId, state, player.name, "Income", undefined, `gained ${CoupGame.INCOME_AMOUNT} coin.`);
                 break;
 
             case "FOREIGN_AID":
@@ -192,6 +256,7 @@ export class CoupGame implements IGame {
                     fromPlayerId: player.playerId,
                     respondedPlayers: []
                 };
+                this.addActionLog(roomId, state, player.name, "Foreign Aid", undefined, "attempted to gain 2 coins from Foreign Aid.");
                 break;
 
             case "TAX":
@@ -201,30 +266,37 @@ export class CoupGame implements IGame {
                     fromPlayerId: player.playerId,
                     respondedPlayers: []
                 };
+                this.addActionLog(roomId, state, player.name, "Tax", undefined, "claimed Duke and attempted to gain 3 coins.");
                 break;
 
             case "COUP":
                 player.coins -= CoupGame.COUP_COST;
+                const coupTarget = this.getPlayerName(state, action.payload.targetId);
+                this.addActionLog(roomId, state, player.name, "Coup", coupTarget, `paid 7 coins to coup ${coupTarget}.`);
                 this.loseInfluence(roomId, state, action.payload.targetId);
                 break;
 
             case "ASSASSINATE":
                 player.coins -= CoupGame.ASSASSINATE_COST;
+                const assassinateTarget = this.getPlayerName(state, action.payload.targetId);
                 state.pendingAction = { 
                     type: "ASSASSINATE", 
                     fromPlayerId: player.playerId, 
                     toPlayerId: action.payload.targetId,
                     respondedPlayers: []
                 };
+                this.addActionLog(roomId, state, player.name, "Assassinate", assassinateTarget, `claimed Assassin and paid 3 coins to assassinate ${assassinateTarget}.`);
                 break;
 
             case "STEAL":
+                const stealTarget = this.getPlayerName(state, action.payload.targetId);
                 state.pendingAction = { 
                     type: "STEAL", 
                     fromPlayerId: player.playerId, 
                     toPlayerId: action.payload.targetId,
                     respondedPlayers: []
                 };
+                this.addActionLog(roomId, state, player.name, "Steal", stealTarget, `claimed Captain and attempted to steal from ${stealTarget}.`);
                 break;
 
             case "EXCHANGE":
@@ -233,6 +305,7 @@ export class CoupGame implements IGame {
                     fromPlayerId: player.playerId,
                     respondedPlayers: []
                 };
+                this.addActionLog(roomId, state, player.name, "Exchange", undefined, "claimed Ambassador and attempted to exchange cards.");
                 break;
 
             case "BLOCK":
@@ -255,6 +328,9 @@ export class CoupGame implements IGame {
                                 blockingCard: "Contessa",
                                 respondedPlayers: []
                             };
+                            
+                            this.addActionLog(roomId, state, player.name, "Block", undefined, "blocked with Contessa.");
+                            
                             // Notify all players about the automatic block
                             if (this.onEvent) {
                                 this.onEvent(roomId, "coup:blockAction", {
@@ -289,6 +365,8 @@ export class CoupGame implements IGame {
                         respondedPlayers: []
                     };
                     
+                    this.addActionLog(roomId, state, player.name, "Block", undefined, `blocked with ${blockableCards[0]}.`);
+                    
                     // Notify all players about the block
                     if (this.onEvent) {
                         this.onEvent(roomId, "coup:blockAction", {
@@ -308,6 +386,8 @@ export class CoupGame implements IGame {
                         blockingCard: action.payload.blockingCard,
                         respondedPlayers: []
                     };
+                    
+                    this.addActionLog(roomId, state, player.name, "Block", undefined, `blocked with ${action.payload.blockingCard}.`);
                     
                     // Notify all players about the block
                     if (this.onEvent) {
@@ -381,6 +461,7 @@ export class CoupGame implements IGame {
 
         if (claimedPlayer.influence.includes(requiredCard)) {
             // Challenge failed - challenger loses influence
+            this.addActionLog(roomId, state, challenger.name, "Challenge", claimedPlayer.name, `challenged ${claimedPlayer.name} but failed. ${challenger.name} lost a card.`);
             this.loseInfluence(roomId, state, challengerId);
             
             // Replace revealed card for the claimed player
@@ -398,6 +479,7 @@ export class CoupGame implements IGame {
             }
         } else {
             // Challenge succeeded - claimed player loses influence
+            this.addActionLog(roomId, state, challenger.name, "Challenge", claimedPlayer.name, `challenged ${claimedPlayer.name} successfully. ${claimedPlayer.name} lost a card.`);
             this.loseInfluence(roomId, state, claimedPlayerId);
             
             if (isBlockChallenge) {
@@ -490,17 +572,21 @@ export class CoupGame implements IGame {
         switch (action.type) {
             case "FOREIGN_AID":
                 from.coins += CoupGame.FOREIGN_AID_AMOUNT;
+                this.addActionLog(roomId, state, from.name, "Foreign Aid", undefined, `gained ${CoupGame.FOREIGN_AID_AMOUNT} coins.`);
                 break;
             case "TAX":
                 from.coins += CoupGame.TAX_AMOUNT;
+                this.addActionLog(roomId, state, from.name, "Tax", undefined, `gained ${CoupGame.TAX_AMOUNT} coins from Tax.`);
                 break;
             case "ASSASSINATE":
+                this.addActionLog(roomId, state, from.name, "Assassinate", to!.name, `successfully assassinated ${to!.name}.`);
                 this.loseInfluence(roomId, state, to!.playerId);
                 break;
             case "STEAL":
                 const stolen = Math.min(CoupGame.STEAL_AMOUNT, to!.coins);
                 to!.coins -= stolen;
                 from.coins += stolen;
+                this.addActionLog(roomId, state, from.name, "Steal", to!.name, `stole ${stolen} coins from ${to!.name}.`);
                 break;
             case "EXCHANGE":
                 const currentInfluenceCount = from.influence.length;
@@ -526,6 +612,7 @@ export class CoupGame implements IGame {
                     from.influence = combined.slice(0, currentInfluenceCount);
                     state.deck.push(...combined.slice(currentInfluenceCount));
                     state.deck = this.shuffle(state.deck);
+                    this.addActionLog(roomId, state, from.name, "Exchange", undefined, "exchanged cards with the deck.");
                 }
                 break;
         }
@@ -622,6 +709,9 @@ export class CoupGame implements IGame {
         state.deck.push(...unselectedCards);
         state.deck = this.shuffle(state.deck);
 
+        // Add log for completed exchange
+        this.addActionLog(roomId, state, player.name, "Exchange", undefined, "exchanged cards with the deck.");
+
         // Clear exchange state and pending action
         state.exchangeCards = undefined;
         state.pendingAction = undefined;
@@ -630,10 +720,18 @@ export class CoupGame implements IGame {
     }
 
     private advanceTurn(state: CoupGameState) {
+        // Add turn end indicator before advancing
+        this.addTurnEndLog("", state);
+        
         const alivePlayers = state.players.filter(p => p.isAlive);
         const currentIndex = alivePlayers.findIndex(p => p.playerId === state.currentTurnPlayerId);
         const nextIndex = (currentIndex + 1) % alivePlayers.length;
         state.currentTurnPlayerId = alivePlayers[nextIndex].playerId;
+        
+        // Increment turn number when we cycle back to the first player
+        if (nextIndex === 0 && alivePlayers.length > 1) {
+            state.turnNumber++;
+        }
     }
 
     private checkWinner(state: CoupGameState) {
