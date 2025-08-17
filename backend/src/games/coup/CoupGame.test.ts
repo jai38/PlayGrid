@@ -129,6 +129,53 @@ describe("CoupGame", () => {
         expect(state.players[1].isAlive).toBe(false);
     });
 
+    test("EXCHANGE_CARDS should allow player to select cards to keep", () => {
+        // Set up exchange state
+        state.exchangeCards = {
+            playerId: "P1",
+            cards: ["Duke", "Captain", "Ambassador", "Assassin"],
+            toKeep: 2
+        };
+        
+        const action: GameAction = { 
+            type: "EXCHANGE_CARDS", 
+            playerId: "P1", 
+            payload: { selectedCards: ["Duke", "Ambassador"] } 
+        };
+        
+        game.handleAction("room1", action, state);
+        
+        const player = state.players.find(p => p.playerId === "P1")!;
+        expect(player.influence).toEqual(["Duke", "Ambassador"]);
+        expect(state.exchangeCards).toBeUndefined();
+        expect(state.pendingAction).toBeUndefined();
+        expect(state.deck.length).toBe(11); // original 9 + 2 returned cards
+    });
+
+    test("EXCHANGE_CARDS should reject invalid card selection", () => {
+        // Set up exchange state
+        state.exchangeCards = {
+            playerId: "P1",
+            cards: ["Duke", "Captain", "Ambassador", "Assassin"],
+            toKeep: 2
+        };
+        
+        const originalInfluence = [...state.players[0].influence];
+        
+        // Try to select too many cards
+        const action: GameAction = { 
+            type: "EXCHANGE_CARDS", 
+            playerId: "P1", 
+            payload: { selectedCards: ["Duke", "Ambassador", "Captain"] } 
+        };
+        
+        game.handleAction("room1", action, state);
+        
+        // Should remain unchanged
+        expect(state.players[0].influence).toEqual(originalInfluence);
+        expect(state.exchangeCards).toBeDefined(); // Still pending
+    });
+
     test("Game should detect winner", () => {
         state.players[1].isAlive = false;
         state.players[2].isAlive = false;

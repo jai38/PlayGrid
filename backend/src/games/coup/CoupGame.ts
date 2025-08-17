@@ -24,6 +24,11 @@ export interface CoupGameState extends GameState {
         toPlayerId?: string;
         blockedBy?: string;
     };
+    exchangeCards?: {
+        playerId: string;
+        cards: CoupCard[];
+        toKeep: number;
+    };
     winner?: string;
 }
 
@@ -103,6 +108,7 @@ export class CoupGame implements IGame {
             case "FOREIGN_AID":
             case "EXCHANGE":
             case "LOSE_CARD":
+            case "EXCHANGE_CARDS":
                 return true;
 
             case "COUP":
@@ -190,10 +196,13 @@ export class CoupGame implements IGame {
             case "LOSE_CARD":
                 this.loseCard(roomId, state, action.playerId, action.payload.card);
                 break;
+            case "EXCHANGE_CARDS":
+                this.handleExchangeCards(roomId, state, action.playerId, action.payload.selectedCards);
+                break;
         }
 
         // Only advance turn for primary actions, not for response actions or card loss
-        if (!["CHALLENGE", "BLOCK", "RESOLVE_ACTION", "LOSE_CARD"].includes(action.type)) {
+        if (!["CHALLENGE", "BLOCK", "RESOLVE_ACTION", "LOSE_CARD", "EXCHANGE_CARDS"].includes(action.type)) {
             this.advanceTurn(state);
         }
 
@@ -257,12 +266,30 @@ export class CoupGame implements IGame {
                 from.coins += stolen;
                 break;
             case "EXCHANGE":
-                const drawn = [state.deck.pop()!, state.deck.pop()!];
-                const combined = [...drawn, ...from.influence];
-                // For now, auto-pick first cards → later add choice via frontend
-                from.influence = combined.slice(0, CoupGame.CARDS_PER_PLAYER);
-                state.deck.push(...combined.slice(CoupGame.CARDS_PER_PLAYER));
-                state.deck = this.shuffle(state.deck);
+                const currentInfluenceCount = from.influence.length;
+                const cardsToDraw = currentInfluenceCount === 1 ? 2 : 2; // Draw 2 cards regardless
+                const drawn: CoupCard[] = [];
+                for (let i = 0; i < cardsToDraw && state.deck.length > 0; i++) {
+                    drawn.push(state.deck.pop()!);
+                }
+                const combined: CoupCard[] = [...drawn, ...from.influence];
+                
+                if (this.onEvent) {
+                    // In game mode: ask client which cards to keep
+                    this.onEvent(roomId, "coup:chooseExchangeCards", {
+                        playerId: from.playerId,
+                        availableCards: combined,
+                        cardsToKeep: currentInfluenceCount
+                    });
+                    // Store the combined cards temporarily in a new state field
+                    state.exchangeCards = { playerId: from.playerId, cards: combined, toKeep: currentInfluenceCount };
+                    return; // wait for client response
+                } else {
+                    // In test mode: auto-pick first cards
+                    from.influence = combined.slice(0, currentInfluenceCount);
+                    state.deck.push(...combined.slice(currentInfluenceCount));
+                    state.deck = this.shuffle(state.deck);
+                }
                 break;
         }
         state.pendingAction = undefined;
@@ -316,6 +343,51 @@ export class CoupGame implements IGame {
             player.isAlive = false;
             this.checkWinner(state);
         }
+
+        this.advanceTurn(state);
+    }
+
+    public handleExchangeCards(roomId: string, state: CoupGameState, playerId: string, selectedCards: CoupCard[]) {
+        console.log(`Player ${playerId} chose exchange cards:`, selectedCards);
+        const exchangeData = state.exchangeCards;
+        if (!exchangeData || exchangeData.playerId !== playerId) {
+            console.warn("Invalid exchange card choice - no pending exchange");
+            return;
+        }
+
+        const player = state.players.find((p) => p.playerId === playerId);
+        if (!player) return;
+
+        // Validate selection
+        if (selectedCards.length !== exchangeData.toKeep) {
+            console.warn(`Invalid exchange selection: expected ${exchangeData.toKeep} cards, got ${selectedCards.length}`);
+            return;
+        }
+
+        // Validate all selected cards are in available cards
+        for (const card of selectedCards) {
+            if (!exchangeData.cards.includes(card)) {
+                console.warn("Invalid card selected:", card);
+                return;
+            }
+        }
+
+        // Update player's influence with selected cards
+        player.influence = [...selectedCards];
+
+        // Return unselected cards to deck
+        const unselectedCards = exchangeData.cards.filter(card => {
+            const cardCount = selectedCards.filter(selected => selected === card).length;
+            const availableCount = exchangeData.cards.filter(available => available === card).length;
+            return cardCount < availableCount;
+        });
+        
+        state.deck.push(...unselectedCards);
+        state.deck = this.shuffle(state.deck);
+
+        // Clear exchange state and pending action
+        state.exchangeCards = undefined;
+        state.pendingAction = undefined;
 
         this.advanceTurn(state);
     }
