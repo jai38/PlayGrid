@@ -5,7 +5,7 @@ import { useGameValidation } from "../hooks/useGameValidation";
 import { useSocket } from "../hooks/useSocket";
 
 // Lazy load game components for better performance
-const CoupUI = lazy(() => import("../games/coup/CoupUI3D"));
+const CoupUI = lazy(() => import("../games/coup/SimpleCoupUI"));
 const MonopolyUI = lazy(() => import("../games/monopoly/MonopolyUI"));
 
 // Define available games with lazy loading
