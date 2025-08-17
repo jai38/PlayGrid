@@ -1,10 +1,9 @@
 // src/games/coup/components/ResponsiveActionPanel.tsx
 import React from "react";
 import type { CoupPlayerExtended } from "../types/cards.types";
-import type {
-  PendingAction,
-} from "../types/coup.types";
+import type { PendingAction } from "../types/coup.types";
 import { ActionType } from "../types/coup.types";
+import { InfluenceCard } from "./InfluenceCard";
 
 interface ResponsiveActionPanelProps {
   myPlayerState: CoupPlayerExtended | null;
@@ -134,7 +133,9 @@ export const ResponsiveActionPanel: React.FC<ResponsiveActionPanelProps> = ({
         <div className="flex items-center gap-1 sm:gap-2">
           <span className="text-base sm:text-lg">{action.icon}</span>
           <div className="text-left">
-            <div className="font-semibold text-xs sm:text-sm">{action.name}</div>
+            <div className="font-semibold text-xs sm:text-sm">
+              {action.name}
+            </div>
             {action.cost > 0 && (
               <div className="text-xs opacity-80">{action.cost}💰</div>
             )}
@@ -153,47 +154,53 @@ export const ResponsiveActionPanel: React.FC<ResponsiveActionPanelProps> = ({
   return (
     <div className="fixed bottom-0 left-0 right-0 lg:relative lg:bottom-auto lg:left-auto lg:right-auto bg-slate-900/95 lg:bg-slate-800 backdrop-blur-sm lg:backdrop-blur-none border-t lg:border lg:border-slate-600 rounded-t-2xl lg:rounded-2xl shadow-2xl z-10">
       <div className="p-3 sm:p-4 space-y-3">
-        
         {/* Pending Action Response */}
-        {pendingAction && myPlayerState?.playerId !== pendingAction.fromPlayerId && (
-          <div className="p-3 bg-gradient-to-r from-yellow-900/60 to-red-900/60 border border-yellow-500/40 rounded-lg">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <div className="font-bold text-yellow-300 text-sm">
-                  ⏳ {pendingAction.type}
+        {pendingAction &&
+          myPlayerState?.playerId !== pendingAction.fromPlayerId && (
+            <div className="p-3 bg-gradient-to-r from-yellow-900/60 to-red-900/60 border border-yellow-500/40 rounded-lg">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <div className="font-bold text-yellow-300 text-sm">
+                    ⏳ {pendingAction.type}
+                  </div>
+                  <div className="text-xs text-gray-300">
+                    by{" "}
+                    {
+                      players.find(
+                        (p) => p.playerId === pendingAction.fromPlayerId,
+                      )?.name
+                    }
+                  </div>
                 </div>
-                <div className="text-xs text-gray-300">
-                  by {players.find(p => p.playerId === pendingAction.fromPlayerId)?.name}
+                <div className="flex gap-1">
+                  <button
+                    onClick={onBlock}
+                    className="px-2 py-1 bg-yellow-600 hover:bg-yellow-500 text-white rounded font-semibold text-xs">
+                    🛡️ Block
+                  </button>
+                  <button
+                    onClick={onChallenge}
+                    className="px-2 py-1 bg-red-600 hover:bg-red-500 text-white rounded font-semibold text-xs">
+                    ⚔️ Challenge
+                  </button>
+                  <button
+                    onClick={onResolve}
+                    className="px-2 py-1 bg-green-600 hover:bg-green-500 text-white rounded font-semibold text-xs">
+                    ✓ Resolve
+                  </button>
                 </div>
-              </div>
-              <div className="flex gap-1">
-                <button
-                  onClick={onBlock}
-                  className="px-2 py-1 bg-yellow-600 hover:bg-yellow-500 text-white rounded font-semibold text-xs">
-                  🛡️ Block
-                </button>
-                <button
-                  onClick={onChallenge}
-                  className="px-2 py-1 bg-red-600 hover:bg-red-500 text-white rounded font-semibold text-xs">
-                  ⚔️ Challenge
-                </button>
-                <button
-                  onClick={onResolve}
-                  className="px-2 py-1 bg-green-600 hover:bg-green-500 text-white rounded font-semibold text-xs">
-                  ✓ Resolve
-                </button>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
         {/* Player Status */}
         <div className="bg-slate-800/60 backdrop-blur-sm p-3 rounded-lg border border-slate-600/50">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-semibold text-white text-sm">Your Status</h3>
-            <div className={`px-2 py-1 rounded text-xs font-semibold ${
-              isAlive ? "bg-green-600 text-white" : "bg-red-600 text-white"
-            }`}>
+            <div
+              className={`px-2 py-1 rounded text-xs font-semibold ${
+                isAlive ? "bg-green-600 text-white" : "bg-red-600 text-white"
+              }`}>
               {isAlive ? "ALIVE" : "ELIMINATED"}
             </div>
           </div>
@@ -205,9 +212,29 @@ export const ResponsiveActionPanel: React.FC<ResponsiveActionPanelProps> = ({
             </div>
             <div className="flex items-center gap-1">
               <span className="text-red-400">❤️</span>
-              <span className="text-lg font-bold text-white">{myInfluences.length}</span>
+              <span className="text-lg font-bold text-white">
+                {myInfluences.length}
+              </span>
               <span className="text-xs text-gray-400">influences</span>
             </div>
+          </div>
+        </div>
+
+        {/* display influences */}
+        <div className="bg-slate-700/40 p-3 rounded-lg">
+          <h4 className="text-sm font-medium text-gray-300 mb-2">
+            Your Influences
+          </h4>
+          <div className="flex gap-1">
+            {myInfluences.map((influence) => (
+              <InfluenceCard
+                card={influence}
+                isHidden={false}
+                isMyCard={false}
+                size="large"
+                rotation={360}
+              />
+            ))}
           </div>
         </div>
 
@@ -224,7 +251,8 @@ export const ResponsiveActionPanel: React.FC<ResponsiveActionPanelProps> = ({
               <option value="">Select target...</option>
               {aliveOpponents.map((opponent) => (
                 <option key={opponent.playerId} value={opponent.playerId}>
-                  {opponent.name} ({opponent.coins}💰, {opponent.influences?.filter((c) => !c.isLost).length || 0}❤️)
+                  {opponent.name} ({opponent.coins}💰,{" "}
+                  {opponent.influences?.filter((c) => !c.isLost).length || 0}❤️)
                 </option>
               ))}
             </select>
@@ -234,11 +262,13 @@ export const ResponsiveActionPanel: React.FC<ResponsiveActionPanelProps> = ({
         {/* Action Grid */}
         {canAct && (
           <div>
-            <h4 className="text-sm font-medium text-gray-300 mb-2">Available Actions</h4>
+            <h4 className="text-sm font-medium text-gray-300 mb-2">
+              Available Actions
+            </h4>
             <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-1 sm:gap-2">
               {allActions.map(renderActionButton)}
             </div>
-            
+
             {/* Must Coup Warning */}
             {coins >= 10 && (
               <div className="mt-2 p-2 bg-red-900/50 border border-red-500/50 rounded text-center">
@@ -254,7 +284,10 @@ export const ResponsiveActionPanel: React.FC<ResponsiveActionPanelProps> = ({
         {!isMyTurn && (
           <div className="text-center p-2 bg-slate-700/40 rounded-lg">
             <div className="text-sm text-gray-300">
-              Waiting for {players.find(p => p.playerId === currentTurnPlayerId)?.name || "opponent"}'s turn
+              Waiting for{" "}
+              {players.find((p) => p.playerId === currentTurnPlayerId)?.name ||
+                "opponent"}
+              's turn
             </div>
           </div>
         )}

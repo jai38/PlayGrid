@@ -158,7 +158,7 @@ export class CoupGame implements IGame {
         if (!player || !player.isAlive) return false;
 
         // If a challenge/block is pending, only those related actions are allowed
-        if (state.pendingAction && !["BLOCK", "CHALLENGE", "RESOLVE_ACTION"].includes(action.type)) {
+        if (state.pendingAction && !["BLOCK", "CHALLENGE", "RESOLVE_ACTION", "EXCHANGE_CARDS", "EXCHANGE", "CHOOSE_BLOCK_CARD", "LOSE_CARD"].includes(action.type)) {
             return false;
         }
 
@@ -192,42 +192,42 @@ export class CoupGame implements IGame {
                 if (!state.pendingAction) return false;
                 const canBlock = this.canActionBeBlocked(state.pendingAction.type);
                 if (!canBlock) return false;
-                
+
                 // For ASSASSINATE, only the target can block
                 if (state.pendingAction.type === "ASSASSINATE") {
                     return state.pendingAction.toPlayerId === action.playerId;
                 }
-                
+
                 // For other blockable actions, any other player can block
                 return state.pendingAction.fromPlayerId !== action.playerId;
-                
+
             case "CHALLENGE":
                 // Can only challenge if there's a pending action/block that can be challenged
                 // and the player hasn't already responded
                 if (!state.pendingAction) return false;
                 const respondedPlayers = state.pendingAction.respondedPlayers || [];
                 if (respondedPlayers.includes(action.playerId)) return false;
-                
+
                 // Can challenge either the original action or a block
                 const canChallengeAction = this.canActionBeChallenged(state.pendingAction.type);
                 const canChallengeBlock = state.pendingAction.blockedBy && state.pendingAction.blockingCard;
-                
+
                 if (!canChallengeAction && !canChallengeBlock) return false;
-                
+
                 // Can't challenge yourself
                 const targetId = action.payload?.targetId;
-                return targetId !== action.playerId && targetId && 
-                       (targetId === state.pendingAction.fromPlayerId || targetId === state.pendingAction.blockedBy);
-                
+                return targetId !== action.playerId && targetId &&
+                    (targetId === state.pendingAction.fromPlayerId || targetId === state.pendingAction.blockedBy);
+
             case "RESOLVE_ACTION":
                 // Can only resolve if there's a pending action and player hasn't responded
                 if (!state.pendingAction) return false;
                 const alreadyResponded = (state.pendingAction.respondedPlayers || []).includes(action.playerId);
                 if (alreadyResponded) return false;
-                
+
                 // Can't resolve your own action
                 return state.pendingAction.fromPlayerId !== action.playerId;
-                
+
             default:
                 return false;
         }
@@ -251,8 +251,8 @@ export class CoupGame implements IGame {
 
             case "FOREIGN_AID":
                 // Can be blocked by Duke
-                state.pendingAction = { 
-                    type: "FOREIGN_AID", 
+                state.pendingAction = {
+                    type: "FOREIGN_AID",
                     fromPlayerId: player.playerId,
                     respondedPlayers: []
                 };
@@ -261,8 +261,8 @@ export class CoupGame implements IGame {
 
             case "TAX":
                 // Claim Duke → subject to challenge
-                state.pendingAction = { 
-                    type: "TAX", 
+                state.pendingAction = {
+                    type: "TAX",
                     fromPlayerId: player.playerId,
                     respondedPlayers: []
                 };
@@ -279,9 +279,9 @@ export class CoupGame implements IGame {
             case "ASSASSINATE":
                 player.coins -= CoupGame.ASSASSINATE_COST;
                 const assassinateTarget = this.getPlayerName(state, action.payload.targetId);
-                state.pendingAction = { 
-                    type: "ASSASSINATE", 
-                    fromPlayerId: player.playerId, 
+                state.pendingAction = {
+                    type: "ASSASSINATE",
+                    fromPlayerId: player.playerId,
                     toPlayerId: action.payload.targetId,
                     respondedPlayers: []
                 };
@@ -290,9 +290,9 @@ export class CoupGame implements IGame {
 
             case "STEAL":
                 const stealTarget = this.getPlayerName(state, action.payload.targetId);
-                state.pendingAction = { 
-                    type: "STEAL", 
-                    fromPlayerId: player.playerId, 
+                state.pendingAction = {
+                    type: "STEAL",
+                    fromPlayerId: player.playerId,
                     toPlayerId: action.payload.targetId,
                     respondedPlayers: []
                 };
@@ -300,8 +300,8 @@ export class CoupGame implements IGame {
                 break;
 
             case "EXCHANGE":
-                state.pendingAction = { 
-                    type: "EXCHANGE", 
+                state.pendingAction = {
+                    type: "EXCHANGE",
                     fromPlayerId: player.playerId,
                     respondedPlayers: []
                 };
@@ -312,12 +312,12 @@ export class CoupGame implements IGame {
                 if (state.pendingAction && state.pendingAction.type) {
                     const actionType = state.pendingAction.type;
                     const blockableCards = this.getBlockableCards(actionType);
-                    
+
                     if (blockableCards.length === 0) {
                         console.warn(`Action ${actionType} cannot be blocked`);
                         return state;
                     }
-                    
+
                     // Auto-resolve Contessa block for Assassinate
                     if (actionType === "ASSASSINATE" && blockableCards.includes("Contessa")) {
                         const target = state.players.find(p => p.playerId === state.pendingAction?.toPlayerId);
@@ -328,9 +328,9 @@ export class CoupGame implements IGame {
                                 blockingCard: "Contessa",
                                 respondedPlayers: []
                             };
-                            
+
                             this.addActionLog(roomId, state, player.name, "Block", undefined, "blocked with Contessa.");
-                            
+
                             // Notify all players about the automatic block
                             if (this.onEvent) {
                                 this.onEvent(roomId, "coup:blockAction", {
@@ -343,7 +343,7 @@ export class CoupGame implements IGame {
                             break;
                         }
                     }
-                    
+
                     // For STEAL, player must choose between Ambassador and Captain
                     if (actionType === "STEAL" && blockableCards.length > 1) {
                         if (this.onEvent) {
@@ -356,7 +356,7 @@ export class CoupGame implements IGame {
                         // Don't set block yet, wait for card choice
                         return state;
                     }
-                    
+
                     // For single-card blocks (FOREIGN_AID with Duke)
                     state.pendingAction = {
                         ...state.pendingAction,
@@ -364,9 +364,9 @@ export class CoupGame implements IGame {
                         blockingCard: blockableCards[0],
                         respondedPlayers: []
                     };
-                    
+
                     this.addActionLog(roomId, state, player.name, "Block", undefined, `blocked with ${blockableCards[0]}.`);
-                    
+
                     // Notify all players about the block
                     if (this.onEvent) {
                         this.onEvent(roomId, "coup:blockAction", {
@@ -386,9 +386,9 @@ export class CoupGame implements IGame {
                         blockingCard: action.payload.blockingCard,
                         respondedPlayers: []
                     };
-                    
+
                     this.addActionLog(roomId, state, player.name, "Block", undefined, `blocked with ${action.payload.blockingCard}.`);
-                    
+
                     // Notify all players about the block
                     if (this.onEvent) {
                         this.onEvent(roomId, "coup:blockAction", {
@@ -411,7 +411,7 @@ export class CoupGame implements IGame {
                     if (!respondedPlayers.includes(action.playerId)) {
                         state.pendingAction.respondedPlayers = [...respondedPlayers, action.playerId];
                     }
-                    
+
                     // Check if all eligible players have responded
                     if (this.allPlayersHaveResponded(state)) {
                         this.resolvePendingAction(roomId, state);
@@ -463,13 +463,13 @@ export class CoupGame implements IGame {
             // Challenge failed - challenger loses influence
             this.addActionLog(roomId, state, challenger.name, "Challenge", claimedPlayer.name, `challenged ${claimedPlayer.name} but failed. ${challenger.name} lost a card.`);
             this.loseInfluence(roomId, state, challengerId);
-            
+
             // Replace revealed card for the claimed player
             claimedPlayer.influence = claimedPlayer.influence.filter(c => c !== requiredCard);
             state.deck.push(requiredCard);
             state.deck = this.shuffle(state.deck);
             claimedPlayer.influence.push(state.deck.pop()!);
-            
+
             if (isBlockChallenge) {
                 // Block challenge failed, block succeeds - action is blocked
                 state.pendingAction = undefined;
@@ -481,7 +481,7 @@ export class CoupGame implements IGame {
             // Challenge succeeded - claimed player loses influence
             this.addActionLog(roomId, state, challenger.name, "Challenge", claimedPlayer.name, `challenged ${claimedPlayer.name} successfully. ${claimedPlayer.name} lost a card.`);
             this.loseInfluence(roomId, state, claimedPlayerId);
-            
+
             if (isBlockChallenge) {
                 // Block challenge succeeded, block fails - continue with original action
                 state.pendingAction.blockedBy = undefined;
@@ -543,21 +543,21 @@ export class CoupGame implements IGame {
 
     private allPlayersHaveResponded(state: CoupGameState): boolean {
         if (!state.pendingAction) return true;
-        
+
         let eligiblePlayers: string[];
-        
+
         if (state.pendingAction.blockedBy) {
             // This is a block - check if all can challenge the block
             eligiblePlayers = this.getEligibleRespondersForBlock(
-                state, 
-                state.pendingAction.fromPlayerId, 
+                state,
+                state.pendingAction.fromPlayerId,
                 state.pendingAction.blockedBy
             );
         } else {
             // This is the original action - check if all can challenge/block
             eligiblePlayers = this.getEligibleRespondersForAction(state, state.pendingAction.fromPlayerId);
         }
-        
+
         const respondedPlayers = state.pendingAction.respondedPlayers || [];
         return eligiblePlayers.every(playerId => respondedPlayers.includes(playerId));
     }
@@ -596,7 +596,7 @@ export class CoupGame implements IGame {
                     drawn.push(state.deck.pop()!);
                 }
                 const combined: CoupCard[] = [...drawn, ...from.influence];
-                
+
                 if (this.onEvent) {
                     // In game mode: ask client which cards to keep
                     this.onEvent(roomId, "coup:chooseExchangeCards", {
@@ -705,7 +705,7 @@ export class CoupGame implements IGame {
             const availableCount = exchangeData.cards.filter(available => available === card).length;
             return cardCount < availableCount;
         });
-        
+
         state.deck.push(...unselectedCards);
         state.deck = this.shuffle(state.deck);
 
@@ -715,19 +715,17 @@ export class CoupGame implements IGame {
         // Clear exchange state and pending action
         state.exchangeCards = undefined;
         state.pendingAction = undefined;
-
-        this.advanceTurn(state);
     }
 
     private advanceTurn(state: CoupGameState) {
         // Add turn end indicator before advancing
         this.addTurnEndLog("", state);
-        
+
         const alivePlayers = state.players.filter(p => p.isAlive);
         const currentIndex = alivePlayers.findIndex(p => p.playerId === state.currentTurnPlayerId);
         const nextIndex = (currentIndex + 1) % alivePlayers.length;
         state.currentTurnPlayerId = alivePlayers[nextIndex].playerId;
-        
+
         // Increment turn number when we cycle back to the first player
         if (nextIndex === 0 && alivePlayers.length > 1) {
             state.turnNumber++;

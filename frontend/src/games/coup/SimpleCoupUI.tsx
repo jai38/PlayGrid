@@ -53,19 +53,35 @@ export default function SimpleCoupUI(): JSX.Element {
   } = useCoupGame(roomId);
 
   // Transform players to include influence card objects
-  const transformedPlayers: CoupPlayerExtended[] = state?.players?.map((player) => ({
-    ...player,
-    influences: player.influences?.map((influence, index) => 
-      createInfluenceCard(influence, player.playerId, index)
-    ) || [],
-  })) || [];
+  const transformedPlayers: CoupPlayerExtended[] =
+    state?.players?.map((player) => ({
+      ...player,
+      influences: [
+        ...(player.influence?.map((influence, index) =>
+          createInfluenceCard(influence, player.playerId, index, false),
+        ) || []),
+        ...(player.revealedCards?.map((influence, index) =>
+          createInfluenceCard(
+            influence,
+            player.playerId,
+            index,
+            true, // Always revealed for revealed cards
+          ),
+        ) || []),
+      ],
+    })) || [];
+
+  console.log("Transformed Players:", transformedPlayers);
 
   const winner = state?.winner;
 
   // Helper function to create influence card objects
-  function createInfluenceCard(influence: any, playerId: string, index: number): InfluenceCard {
-    const isRevealed = influence.isLost || false;
-    
+  function createInfluenceCard(
+    influence: any,
+    playerId: string,
+    index: number,
+    isRevealed = false,
+  ): InfluenceCard {
     // Map string types to enum values
     switch (influence.type || influence) {
       case "DUKE":
@@ -149,10 +165,10 @@ export default function SimpleCoupUI(): JSX.Element {
           <div className="fixed inset-0 flex items-center justify-center bg-black/75 z-50">
             <div className="bg-gradient-to-br from-green-900 to-green-800 p-8 rounded-xl border border-green-500 text-center">
               <div className="text-4xl mb-4">🎉</div>
-              <div className="text-2xl font-bold text-green-300 mb-2">Game Over!</div>
-              <div className="text-lg text-white">
-                {winner.name} wins!
+              <div className="text-2xl font-bold text-green-300 mb-2">
+                Game Over!
               </div>
+              <div className="text-lg text-white">{winner} wins!</div>
             </div>
           </div>
         )}
@@ -161,28 +177,27 @@ export default function SimpleCoupUI(): JSX.Element {
         {showLoseModal && (
           <LoseCardModal cards={cardsToChoose} onSelect={loseCardChoice} />
         )}
-        
+
         {/* ExchangeCard Modal */}
         {showExchangeModal && exchangeData && (
-          <ExchangeCardModal 
-            availableCards={exchangeData.availableCards} 
+          <ExchangeCardModal
+            availableCards={exchangeData.availableCards}
             cardsToKeep={exchangeData.cardsToKeep}
-            onSelect={exchangeCardChoice} 
+            onSelect={exchangeCardChoice}
           />
         )}
-        
+
         {/* BlockCard Modal */}
         {showBlockCardModal && blockCardData && (
-          <BlockCardModal 
-            availableCards={blockCardData.availableCards} 
+          <BlockCardModal
+            availableCards={blockCardData.availableCards}
             actionToBlock={blockCardData.actionToBlock}
-            onSelect={blockCardChoice} 
+            onSelect={blockCardChoice}
           />
         )}
 
         {/* Game Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          
           {/* Game Board and Players */}
           <div className="lg:col-span-3">
             <SimpleGameBoard
@@ -195,8 +210,10 @@ export default function SimpleCoupUI(): JSX.Element {
           {/* Action Log Panel */}
           <div className="lg:col-span-1">
             <div className="bg-slate-800/60 backdrop-blur-sm rounded-xl border border-slate-600 p-4">
-              <h3 className="text-white font-semibold mb-3 text-sm">Game Log</h3>
-              <ActionLogPanel 
+              <h3 className="text-white font-semibold mb-3 text-sm">
+                Game Log
+              </h3>
+              <ActionLogPanel
                 logs={state.actionLogs || []}
                 className="w-full"
               />
