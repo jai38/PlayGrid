@@ -347,6 +347,7 @@ export default function CoupUI3D(): JSX.Element {
               onChallenge={onChallenge}
               onResolve={onResolve}
               players={transformedPlayers}
+              currentTurnPlayerId={state.currentTurnPlayerId}
             />
           </>
         </div>
