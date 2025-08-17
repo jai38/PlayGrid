@@ -23,6 +23,10 @@ interface UseCoupGameReturn {
     animateCoin: CoinAnimation | null;
     showLoseModal: boolean;
     cardsToChoose: string[];
+    showExchangeModal: boolean;
+    exchangeData: { availableCards: string[], cardsToKeep: number } | null;
+    showBlockCardModal: boolean;
+    blockCardData: { availableCards: string[], actionToBlock: string } | null;
     setSelectedTarget: (target: string | null) => void;
     sendAction: (type: string, payload?: any) => void;
     onActionClick: (type: string) => void;
@@ -30,6 +34,8 @@ interface UseCoupGameReturn {
     onChallenge: () => void;
     onResolve: () => void;
     loseCardChoice: (card: string) => void;
+    exchangeCardChoice: (cards: string[]) => void;
+    blockCardChoice: (card: string) => void;
 }
 
 export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
@@ -48,6 +54,10 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
     const lastCoinsRef = useRef<Record<string, number>>({});
     const [showLoseModal, setShowLoseModal] = useState(false);
     const [cardsToChoose, setCardsToChoose] = useState<string[]>([]);
+    const [showExchangeModal, setShowExchangeModal] = useState(false);
+    const [exchangeData, setExchangeData] = useState<{ availableCards: string[], cardsToKeep: number } | null>(null);
+    const [showBlockCardModal, setShowBlockCardModal] = useState(false);
+    const [blockCardData, setBlockCardData] = useState<{ availableCards: string[], actionToBlock: string } | null>(null);
 
     /* -------------------- Socket Event Handlers -------------------- */
     const setupEvents = useCallback((socket: Socket) => {
@@ -100,12 +110,41 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
             setShowLoseModal(currentPlayer.playerId === data.playerId);
             setCardsToChoose(data.cards);
         };
+        
+        const handleChooseExchangeCards = (data: any) => {
+            if (currentPlayer.playerId === data.playerId) {
+                setShowExchangeModal(true);
+                setExchangeData({
+                    availableCards: data.availableCards,
+                    cardsToKeep: data.cardsToKeep
+                });
+            }
+        };
+
+        const handleChooseBlockCard = (data: any) => {
+            if (currentPlayer.playerId === data.playerId) {
+                setShowBlockCardModal(true);
+                setBlockCardData({
+                    availableCards: data.availableCards,
+                    actionToBlock: data.actionToBlock
+                });
+            }
+        };
+
+        const handleBlockAction = (data: any) => {
+            // Show notification about the block to all players
+            setError(`${data.blockedBy} blocked ${data.action} with ${data.blockingCard}${data.automatic ? ' (automatic)' : ''}`);
+            setTimeout(() => setError(''), 3000);
+        };
 
         socket.on('game:state', handleGameState);
         socket.on('errorMessage', handleError);
         socket.on('player:disconnected', handlePlayerDisconnected);
         socket.on('player:reconnected', handlePlayerReconnected);
         socket.on("coup:chooseCardToLose", handleChooseCardToLose);
+        socket.on("coup:chooseExchangeCards", handleChooseExchangeCards);
+        socket.on("coup:chooseBlockCard", handleChooseBlockCard);
+        socket.on("coup:blockAction", handleBlockAction);
 
         return () => {
             socket.off('game:state', handleGameState);
@@ -113,6 +152,9 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
             socket.off('player:disconnected', handlePlayerDisconnected);
             socket.off('player:reconnected', handlePlayerReconnected);
             socket.off("coup:chooseCardToLose", handleChooseCardToLose);
+            socket.off("coup:chooseExchangeCards", handleChooseExchangeCards);
+            socket.off("coup:chooseBlockCard", handleChooseBlockCard);
+            socket.off("coup:blockAction", handleBlockAction);
         };
     }, []);
 
@@ -130,6 +172,38 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
         if (socket && roomId && card && currentPlayer) {
             socket.emit("coup:loseCardChoice", { roomId, action: { type: "LOSE_CARD", playerId: currentPlayer.playerId, payload: { card } } });
             setShowLoseModal(false);
+        }
+    };
+
+    const exchangeCardChoice = (selectedCards: string[]) => {
+        console.log(`Player ${currentPlayer.playerId} chose exchange cards:`, selectedCards);
+        if (socket && roomId && selectedCards && currentPlayer) {
+            socket.emit("coup:exchangeCardsChoice", { 
+                roomId, 
+                action: { 
+                    type: "EXCHANGE_CARDS", 
+                    playerId: currentPlayer.playerId, 
+                    payload: { selectedCards } 
+                } 
+            });
+            setShowExchangeModal(false);
+            setExchangeData(null);
+        }
+    };
+
+    const blockCardChoice = (selectedCard: string) => {
+        console.log(`Player ${currentPlayer.playerId} chose block card:`, selectedCard);
+        if (socket && roomId && selectedCard && currentPlayer) {
+            socket.emit("coup:blockCardChoice", { 
+                roomId, 
+                action: { 
+                    type: "CHOOSE_BLOCK_CARD", 
+                    playerId: currentPlayer.playerId, 
+                    payload: { blockingCard: selectedCard } 
+                } 
+            });
+            setShowBlockCardModal(false);
+            setBlockCardData(null);
         }
     };
 
@@ -245,6 +319,10 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
         animateCoin,
         showLoseModal,
         cardsToChoose,
+        showExchangeModal,
+        exchangeData,
+        showBlockCardModal,
+        blockCardData,
         setSelectedTarget,
         sendAction,
         onActionClick,
@@ -252,5 +330,7 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
         onChallenge,
         onResolve,
         loseCardChoice,
+        exchangeCardChoice,
+        blockCardChoice,
     };
 };

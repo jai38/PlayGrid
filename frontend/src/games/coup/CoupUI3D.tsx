@@ -12,6 +12,8 @@ import {
   InfluenceType,
 } from "./types/cards.types";
 import LoseCardModal from "./components/LoseCardModal";
+import ExchangeCardModal from "./components/ExchangeCardModal";
+import BlockCardModal from "./components/BlockCardModal";
 
 /**
  * CoupUI3D - Enhanced 3D immersive Coup game interface
@@ -43,12 +45,18 @@ export default function CoupUI3D(): JSX.Element {
     animateCoin,
     showLoseModal,
     cardsToChoose,
+    showExchangeModal,
+    exchangeData,
+    showBlockCardModal,
+    blockCardData,
     setSelectedTarget,
     onActionClick,
     onBlock,
     onChallenge,
     onResolve,
     loseCardChoice,
+    exchangeCardChoice,
+    blockCardChoice,
   } = useCoupGame(roomId);
 
   const [transformedPlayers, setTransformedPlayers] = useState<
@@ -246,6 +254,24 @@ export default function CoupUI3D(): JSX.Element {
             {/* LoseCard Modal */}
             {showLoseModal && (
               <LoseCardModal cards={cardsToChoose} onSelect={loseCardChoice} />
+            )}
+            
+            {/* ExchangeCard Modal */}
+            {showExchangeModal && exchangeData && (
+              <ExchangeCardModal 
+                availableCards={exchangeData.availableCards} 
+                cardsToKeep={exchangeData.cardsToKeep}
+                onSelect={exchangeCardChoice} 
+              />
+            )}
+            
+            {/* BlockCard Modal */}
+            {showBlockCardModal && blockCardData && (
+              <BlockCardModal 
+                availableCards={blockCardData.availableCards} 
+                actionToBlock={blockCardData.actionToBlock}
+                onSelect={blockCardChoice} 
+              />
             )}
             {/* Game Board Area */}
             <div
