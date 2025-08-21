@@ -142,11 +142,11 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
         const handlePendingAction = (data: any) => {
             if (data.type === "BLOCK_PENDING_CHALLENGE") {
                 setError(`${data.blockedBy} blocked ${data.action} with ${data.blockingCard}`);
-                
+
                 // Update the state to show the blocked action as challengeable
                 setState((prevState) => {
                     if (!prevState) return prevState;
-                    
+
                     return {
                         ...prevState,
                         pendingAction: {
@@ -353,7 +353,7 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
 
     const onChallenge = useCallback(() => {
         if (!state?.pendingAction) return;
-        
+
         // If there's a block, challenge the blocking player, otherwise challenge the original action player
         const targetId = state.pendingAction.blockedBy || state.pendingAction.fromPlayerId;
         sendAction(ActionType.CHALLENGE, { targetId });
