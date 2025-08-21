@@ -1,5 +1,5 @@
 // src/games/coup/SimpleCoupUI.tsx
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useCoupGame } from "./hooks/useCoupGame";
 import { SimpleGameBoard } from "./components/SimpleGameBoard";
 import { ResponsiveActionPanel } from "./components/ResponsiveActionPanel";
@@ -27,6 +27,7 @@ import BlockCardModal from "./components/BlockCardModal";
  */
 export default function SimpleCoupUI(): JSX.Element {
   const { roomId } = useParams<{ roomId: string }>();
+  const navigate = useNavigate();
 
   // Custom hook for game state management
   const {
@@ -74,6 +75,7 @@ export default function SimpleCoupUI(): JSX.Element {
   console.log("Transformed Players:", transformedPlayers);
 
   const winner = state?.winner;
+  const winnerName = winner ? state?.players?.find(p => p.playerId === winner)?.name || winner : null;
 
   // Helper function to create influence card objects
   function createInfluenceCard(
@@ -168,7 +170,13 @@ export default function SimpleCoupUI(): JSX.Element {
               <div className="text-2xl font-bold text-green-300 mb-2">
                 Game Over!
               </div>
-              <div className="text-lg text-white">{winner} wins!</div>
+              <div className="text-lg text-white">{winnerName} wins!</div>
+              <button 
+                onClick={() => navigate(`/room/${roomId}`)}
+                className="mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-semibold transition-colors"
+              >
+                Return to Room
+              </button>
             </div>
           </div>
         )}

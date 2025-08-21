@@ -338,6 +338,33 @@ export function initSocket(io: Server) {
             }
         });
 
+        socket.on("game:select", ({ roomId, gameId }, ack?: SocketAck) => {
+            try {
+                const room = getRoom(roomId);
+                if (!room) {
+                    socket.emit("game:error", { error: "Room not found" });
+                    safeAck(ack, { success: false, error: "Room not found" });
+                    return;
+                }
+
+                // Check if the player is the host
+                const player = room.players.find(p => p.socketId === socket.id);
+                if (!player || !player.isHost) {
+                    socket.emit("game:error", { error: "Only host can select games" });
+                    safeAck(ack, { success: false, error: "Only host can select games" });
+                    return;
+                }
+
+                // Broadcast game selection to all players in the room
+                io.to(roomId).emit("game:selected", { gameId, hostName: player.name });
+                safeAck(ack, { success: true, gameId, roomId });
+            } catch (err) {
+                console.error("game:select error:", err);
+                socket.emit("game:error", { error: "Failed to select game" });
+                safeAck(ack, { success: false, error: "Failed to select game" });
+            }
+        });
+
         socket.on("game:start", async ({ roomId, gameId }, ack?: SocketAck) => {
             try {
                 const room = getRoom(roomId);

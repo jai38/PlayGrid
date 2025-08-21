@@ -173,16 +173,60 @@ export const ResponsiveActionPanel: React.FC<ResponsiveActionPanelProps> = ({
                   </div>
                 </div>
                 <div className="flex gap-1">
-                  <button
-                    onClick={onBlock}
-                    className="px-2 py-1 bg-yellow-600 hover:bg-yellow-500 text-white rounded font-semibold text-xs">
-                    🛡️ Block
-                  </button>
-                  <button
-                    onClick={onChallenge}
-                    className="px-2 py-1 bg-red-600 hover:bg-red-500 text-white rounded font-semibold text-xs">
-                    ⚔️ Challenge
-                  </button>
+                  {/* Block button - conditionally shown based on action type and target */}
+                  {(() => {
+                    const actionType = pendingAction.type;
+                    // Show block button based on game rules
+                    if (actionType === "FOREIGN_AID") {
+                      // Anyone can block Foreign Aid with Duke
+                      return (
+                        <button
+                          onClick={onBlock}
+                          className="px-2 py-1 bg-yellow-600 hover:bg-yellow-500 text-white rounded font-semibold text-xs">
+                          🛡️ Block
+                        </button>
+                      );
+                    } else if (actionType === "ASSASSINATE" && pendingAction.toPlayerId === myPlayerState?.playerId) {
+                      // Only target can block Assassinate with Contessa
+                      return (
+                        <button
+                          onClick={onBlock}
+                          className="px-2 py-1 bg-yellow-600 hover:bg-yellow-500 text-white rounded font-semibold text-xs">
+                          🛡️ Block
+                        </button>
+                      );
+                    } else if (actionType === "STEAL" && pendingAction.toPlayerId === myPlayerState?.playerId) {
+                      // Only target can block Steal with Ambassador/Captain
+                      return (
+                        <button
+                          onClick={onBlock}
+                          className="px-2 py-1 bg-yellow-600 hover:bg-yellow-500 text-white rounded font-semibold text-xs">
+                          🛡️ Block
+                        </button>
+                      );
+                    }
+                    // TAX and EXCHANGE cannot be blocked, so no block button
+                    return null;
+                  })()}
+                  
+                  {/* Challenge button - conditionally shown based on action type */}
+                  {(() => {
+                    const actionType = pendingAction.type;
+                    // Actions that can be challenged (require character cards)
+                    const challengeableActions = ["TAX", "ASSASSINATE", "STEAL", "EXCHANGE"];
+                    // Foreign Aid, Income, and Coup cannot be challenged
+                    if (challengeableActions.includes(actionType)) {
+                      return (
+                        <button
+                          onClick={onChallenge}
+                          className="px-2 py-1 bg-red-600 hover:bg-red-500 text-white rounded font-semibold text-xs">
+                          ⚔️ Challenge
+                        </button>
+                      );
+                    }
+                    return null;
+                  })()}
+                  
                   <button
                     onClick={onResolve}
                     className="px-2 py-1 bg-green-600 hover:bg-green-500 text-white rounded font-semibold text-xs">
