@@ -28,7 +28,10 @@ export interface PendingAction {
     type: string;
     fromPlayerId: string;
     toPlayerId?: string;
+    blocked?: boolean;
     blockedBy?: string;
+    challengeResolved?: boolean;
+    successful?: boolean;
 }
 
 export interface CoupGameState {

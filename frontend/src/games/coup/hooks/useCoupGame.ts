@@ -1,5 +1,6 @@
 // src/games/coup/hooks/useCoupGame.ts
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Socket } from 'socket.io-client';
 import { useSocket } from '../../../hooks/useSocket';
 import {
@@ -36,9 +37,10 @@ interface UseCoupGameReturn {
     loseCardChoice: (card: string) => void;
     exchangeCardChoice: (cards: string[]) => void;
     blockCardChoice: (card: string) => void;
+    handleGameClose: () => void;
 }
-
 export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
+    const navigate = useNavigate();
     const [state, setState] = useState<CoupGameState | null>(null);
     const [currentPlayer] = useState<CurrentPlayer>(() => {
         try {
@@ -110,7 +112,7 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
             setShowLoseModal(currentPlayer.playerId === data.playerId);
             setCardsToChoose(data.cards);
         };
-        
+
         const handleChooseExchangeCards = (data: any) => {
             if (currentPlayer.playerId === data.playerId) {
                 setShowExchangeModal(true);
@@ -141,7 +143,7 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
             // Update state with new log entry
             setState((prevState) => {
                 if (!prevState) return prevState;
-                
+
                 return {
                     ...prevState,
                     actionLogs: data.allLogs || []
@@ -158,6 +160,10 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
         socket.on("coup:chooseBlockCard", handleChooseBlockCard);
         socket.on("coup:blockAction", handleBlockAction);
         socket.on("coup:actionLog", handleActionLog);
+        socket.on("game:cleaned", () => {
+            console.log("Game cleaned up");
+            navigate(`/room/${roomId}`);
+        });
 
         return () => {
             socket.off('game:state', handleGameState);
@@ -178,6 +184,7 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
     useEffect(() => {
         if (socket && roomId && currentPlayer.playerId) {
             socket.emit('game:join', { roomId, gameId: 'coup' });
+
         }
     }, [socket, roomId, currentPlayer.playerId]);
 
@@ -189,16 +196,22 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
         }
     };
 
+    const handleGameClose = () => {
+        if (socket && roomId) {
+            socket.emit("game:cleanup", roomId);
+        }
+    };
+
     const exchangeCardChoice = (selectedCards: string[]) => {
         console.log(`Player ${currentPlayer.playerId} chose exchange cards:`, selectedCards);
         if (socket && roomId && selectedCards && currentPlayer) {
-            socket.emit("coup:exchangeCardsChoice", { 
-                roomId, 
-                action: { 
-                    type: "EXCHANGE_CARDS", 
-                    playerId: currentPlayer.playerId, 
-                    payload: { selectedCards } 
-                } 
+            socket.emit("coup:exchangeCardsChoice", {
+                roomId,
+                action: {
+                    type: "EXCHANGE_CARDS",
+                    playerId: currentPlayer.playerId,
+                    payload: { selectedCards }
+                }
             });
             setShowExchangeModal(false);
             setExchangeData(null);
@@ -208,13 +221,13 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
     const blockCardChoice = (selectedCard: string) => {
         console.log(`Player ${currentPlayer.playerId} chose block card:`, selectedCard);
         if (socket && roomId && selectedCard && currentPlayer) {
-            socket.emit("coup:blockCardChoice", { 
-                roomId, 
-                action: { 
-                    type: "CHOOSE_BLOCK_CARD", 
-                    playerId: currentPlayer.playerId, 
-                    payload: { blockingCard: selectedCard } 
-                } 
+            socket.emit("coup:blockCardChoice", {
+                roomId,
+                action: {
+                    type: "CHOOSE_BLOCK_CARD",
+                    playerId: currentPlayer.playerId,
+                    payload: { blockingCard: selectedCard }
+                }
             });
             setShowBlockCardModal(false);
             setBlockCardData(null);
@@ -322,6 +335,7 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
         sendAction(ActionType.RESOLVE_ACTION);
     }, [sendAction]);
 
+
     return {
         state,
         currentPlayer,
@@ -346,5 +360,6 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
         loseCardChoice,
         exchangeCardChoice,
         blockCardChoice,
+        handleGameClose
     };
 };

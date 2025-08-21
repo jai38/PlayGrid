@@ -458,6 +458,16 @@ export function initSocket(io: Server) {
             }
         });
 
+        socket.on("game:cleanup", (roomId: string) => {
+            try {
+                gameManager.cleanupGame(roomId);
+            } catch (err) {
+                console.error("game:cleanup error:", err);
+                socket.emit("game:error", { error: "Failed to cleanup game" });
+            }
+        });
+
+
         socket.on("coup:loseCardChoice", (payload: GameActionPayload, ack?: SocketAck) => {
             try {
                 const { roomId, action } = payload;

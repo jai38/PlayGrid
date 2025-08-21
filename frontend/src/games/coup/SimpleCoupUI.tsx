@@ -51,6 +51,7 @@ export default function SimpleCoupUI(): JSX.Element {
     loseCardChoice,
     exchangeCardChoice,
     blockCardChoice,
+    handleGameClose,
   } = useCoupGame(roomId);
 
   // Transform players to include influence card objects
@@ -75,7 +76,9 @@ export default function SimpleCoupUI(): JSX.Element {
   console.log("Transformed Players:", transformedPlayers);
 
   const winner = state?.winner;
-  const winnerName = winner ? state?.players?.find(p => p.playerId === winner)?.name || winner : null;
+  const winnerName = winner
+    ? state?.players?.find((p) => p.playerId === winner)?.name || winner
+    : null;
 
   // Helper function to create influence card objects
   function createInfluenceCard(
@@ -171,10 +174,9 @@ export default function SimpleCoupUI(): JSX.Element {
                 Game Over!
               </div>
               <div className="text-lg text-white">{winnerName} wins!</div>
-              <button 
-                onClick={() => navigate(`/room/${roomId}`)}
-                className="mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-semibold transition-colors"
-              >
+              <button
+                onClick={handleGameClose}
+                className="mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-semibold transition-colors">
                 Return to Room
               </button>
             </div>

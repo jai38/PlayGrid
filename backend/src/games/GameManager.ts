@@ -148,6 +148,15 @@ export class GameManager {
         }
     }
 
+    public cleanupGame(roomId: string): void {
+        const gameInstance = this.activeGames.get(roomId);
+        if (gameInstance) {
+            console.log(`Cleaning up game in room ${roomId}`);
+            this.activeGames.delete(roomId);
+            this.io.to(roomId).emit("game:cleaned");
+        }
+    }
+
     // Public method for manual cleanup
     public cleanupInactiveGames(): void {
         this.performCleanup();
