@@ -162,6 +162,7 @@ export const ResponsiveActionPanel: React.FC<ResponsiveActionPanelProps> = ({
                 <div>
                   <div className="font-bold text-yellow-300 text-sm">
                     ⏳ {pendingAction.type}
+                    {pendingAction.blockedBy && " (BLOCKED)"}
                   </div>
                   <div className="text-xs text-gray-300">
                     by{" "}
@@ -170,6 +171,17 @@ export const ResponsiveActionPanel: React.FC<ResponsiveActionPanelProps> = ({
                         (p) => p.playerId === pendingAction.fromPlayerId,
                       )?.name
                     }
+                    {pendingAction.blockedBy && (
+                      <>
+                        {" • blocked by "}
+                        {
+                          players.find(
+                            (p) => p.playerId === pendingAction.blockedBy,
+                          )?.name
+                        }
+                        {pendingAction.blockingCard && ` with ${pendingAction.blockingCard}`}
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="flex gap-1">
@@ -214,6 +226,19 @@ export const ResponsiveActionPanel: React.FC<ResponsiveActionPanelProps> = ({
                     const actionType = pendingAction.type;
                     // Actions that can be challenged (require character cards)
                     const challengeableActions = ["TAX", "ASSASSINATE", "STEAL", "EXCHANGE"];
+                    
+                    // If there's a block, show challenge button to challenge the block
+                    if (pendingAction.blockedBy && pendingAction.blockingCard) {
+                      return (
+                        <button
+                          onClick={onChallenge}
+                          className="px-2 py-1 bg-red-600 hover:bg-red-500 text-white rounded font-semibold text-xs">
+                          ⚔️ Challenge Block
+                        </button>
+                      );
+                    }
+                    
+                    // Otherwise, show challenge button for original action if challengeable
                     // Foreign Aid, Income, and Coup cannot be challenged
                     if (challengeableActions.includes(actionType)) {
                       return (

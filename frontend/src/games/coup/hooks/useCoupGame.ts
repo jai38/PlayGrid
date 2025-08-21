@@ -139,6 +139,29 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
             setTimeout(() => setError(''), 3000);
         };
 
+        const handlePendingAction = (data: any) => {
+            if (data.type === "BLOCK_PENDING_CHALLENGE") {
+                setError(`${data.blockedBy} blocked ${data.action} with ${data.blockingCard}`);
+                
+                // Update the state to show the blocked action as challengeable
+                setState((prevState) => {
+                    if (!prevState) return prevState;
+                    
+                    return {
+                        ...prevState,
+                        pendingAction: {
+                            type: data.action, // Keep original action type
+                            fromPlayerId: data.originalAction.fromPlayerId,
+                            toPlayerId: data.originalAction.toPlayerId,
+                            blockedBy: data.blockedBy,
+                            blockingCard: data.blockingCard,
+                            respondedPlayers: [] // Reset responded players for new challenge phase
+                        }
+                    };
+                });
+            }
+        };
+
         const handleActionLog = (data: any) => {
             // Update state with new log entry
             setState((prevState) => {
@@ -159,6 +182,7 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
         socket.on("coup:chooseExchangeCards", handleChooseExchangeCards);
         socket.on("coup:chooseBlockCard", handleChooseBlockCard);
         socket.on("coup:blockAction", handleBlockAction);
+        socket.on("game:pendingAction", handlePendingAction);
         socket.on("coup:actionLog", handleActionLog);
         socket.on("game:cleaned", () => {
             console.log("Game cleaned up");
@@ -174,6 +198,7 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
             socket.off("coup:chooseExchangeCards", handleChooseExchangeCards);
             socket.off("coup:chooseBlockCard", handleChooseBlockCard);
             socket.off("coup:blockAction", handleBlockAction);
+            socket.off("game:pendingAction", handlePendingAction);
             socket.off("coup:actionLog", handleActionLog);
         };
     }, []);
@@ -328,7 +353,10 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
 
     const onChallenge = useCallback(() => {
         if (!state?.pendingAction) return;
-        sendAction(ActionType.CHALLENGE, { targetId: state.pendingAction.fromPlayerId });
+        
+        // If there's a block, challenge the blocking player, otherwise challenge the original action player
+        const targetId = state.pendingAction.blockedBy || state.pendingAction.fromPlayerId;
+        sendAction(ActionType.CHALLENGE, { targetId });
     }, [state?.pendingAction, sendAction]);
 
     const onResolve = useCallback(() => {
