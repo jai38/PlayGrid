@@ -485,17 +485,38 @@ export class CoupGame implements IGame {
         } else {
             // Challenge succeeded - claimed player loses influence
             this.addActionLog(roomId, state, challenger.name, "Challenge", claimedPlayer.name, `challenged ${claimedPlayer.name} successfully. ${claimedPlayer.name} lost a card.`);
-            this.loseInfluence(roomId, state, claimedPlayerId);
-
-            if (isBlockChallenge) {
-                // Block challenge succeeded, block fails - continue with original action
-                state.pendingAction.blockedBy = undefined;
-                state.pendingAction.blockingCard = undefined;
-                state.pendingAction.respondedPlayers = [];
-                // Don't resolve yet, let other players respond to the original action
-            } else {
-                // Action challenge succeeded, action is canceled
+            
+            // Special case: If this was a Contessa block challenge for Assassinate, player loses both cards
+            const isContessaBlockChallenge = isBlockChallenge && 
+                state.pendingAction.blockingCard === "Contessa" &&
+                state.pendingAction.type === "ASSASSINATE";
+            
+            if (isContessaBlockChallenge) {
+                // Player loses one card for the failed challenge
+                this.loseInfluence(roomId, state, claimedPlayerId);
+                
+                // Check if player is still alive after losing first card
+                if (claimedPlayer.isAlive && claimedPlayer.influence.length > 0) {
+                    // Player loses second card from the Assassinate action
+                    this.addActionLog(roomId, state, claimedPlayer.name, "Assassinate", undefined, "was assassinated (failed Contessa block).");
+                    this.loseInfluence(roomId, state, claimedPlayerId);
+                }
+                
+                // Clear the pending action since both effects are resolved
                 state.pendingAction = undefined;
+            } else {
+                this.loseInfluence(roomId, state, claimedPlayerId);
+                
+                if (isBlockChallenge) {
+                    // Block challenge succeeded, block fails - continue with original action
+                    state.pendingAction.blockedBy = undefined;
+                    state.pendingAction.blockingCard = undefined;
+                    state.pendingAction.respondedPlayers = [];
+                    // Don't resolve yet, let other players respond to the original action
+                } else {
+                    // Action challenge succeeded, action is canceled
+                    state.pendingAction = undefined;
+                }
             }
         }
     }
