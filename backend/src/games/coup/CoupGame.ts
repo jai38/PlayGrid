@@ -44,6 +44,9 @@ export interface CoupGameState extends GameState {
         cards: CoupCard[];
         toKeep: number;
     };
+    pendingCardLoss?: {
+        playerId: string;
+    };
     winner?: string;
 }
 
@@ -430,7 +433,9 @@ export class CoupGame implements IGame {
         }
 
         // Only advance turn for primary actions, not for response actions or card loss
-        if (!["CHALLENGE", "BLOCK", "RESOLVE_ACTION", "LOSE_CARD", "EXCHANGE_CARDS", "CHOOSE_BLOCK_CARD"].includes(action.type)) {
+        // Also don't advance if there's a pending card loss waiting for player choice
+        if (!["CHALLENGE", "BLOCK", "RESOLVE_ACTION", "LOSE_CARD", "EXCHANGE_CARDS", "CHOOSE_BLOCK_CARD"].includes(action.type) && 
+            !state.pendingCardLoss) {
             this.advanceTurn(state);
         }
 
@@ -636,6 +641,8 @@ export class CoupGame implements IGame {
                     playerId: targetId,
                     cards: target.influence,
                 });
+                // Set a flag to indicate we're waiting for card loss
+                state.pendingCardLoss = { playerId: targetId };
                 return; // wait for client response
             } else {
                 // In test mode: auto-lose first card
@@ -668,6 +675,8 @@ export class CoupGame implements IGame {
             this.checkWinner(state);
         }
 
+        // Clear pending card loss and advance turn
+        state.pendingCardLoss = undefined;
         this.advanceTurn(state);
     }
 
