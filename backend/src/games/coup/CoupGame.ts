@@ -342,6 +342,15 @@ export class CoupGame implements IGame {
                                     blockingCard: "Contessa",
                                     automatic: true
                                 });
+
+                                // Emit pendingAction event for challenge panel
+                                this.onEvent(roomId, "game:pendingAction", {
+                                    type: "BLOCK_PENDING_CHALLENGE",
+                                    action: actionType,
+                                    blockedBy: action.playerId,
+                                    blockingCard: "Contessa",
+                                    originalAction: state.pendingAction
+                                });
                             }
                             break;
                         }
@@ -377,6 +386,15 @@ export class CoupGame implements IGame {
                             blockedBy: action.playerId,
                             blockingCard: blockableCards[0]
                         });
+
+                        // Emit pendingAction event for challenge panel
+                        this.onEvent(roomId, "game:pendingAction", {
+                            type: "BLOCK_PENDING_CHALLENGE",
+                            action: actionType,
+                            blockedBy: action.playerId,
+                            blockingCard: blockableCards[0],
+                            originalAction: state.pendingAction
+                        });
                     }
                 }
                 break;
@@ -398,6 +416,15 @@ export class CoupGame implements IGame {
                             action: state.pendingAction.type,
                             blockedBy: action.playerId,
                             blockingCard: action.payload.blockingCard
+                        });
+
+                        // Emit pendingAction event for challenge panel
+                        this.onEvent(roomId, "game:pendingAction", {
+                            type: "BLOCK_PENDING_CHALLENGE",
+                            action: state.pendingAction.type,
+                            blockedBy: action.playerId,
+                            blockingCard: action.payload.blockingCard,
+                            originalAction: state.pendingAction
                         });
                     }
                 }

@@ -30,6 +30,7 @@ export interface PendingAction {
     toPlayerId?: string;
     blocked?: boolean;
     blockedBy?: string;
+    blockingCard?: string;
     challengeResolved?: boolean;
     successful?: boolean;
 }

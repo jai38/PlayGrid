@@ -151,30 +151,49 @@ export const ResponsiveActionPanel: React.FC<ResponsiveActionPanelProps> = ({
     );
   };
 
+  const showPendingAction = (pendingAction: any) => {
+    return pendingAction.blockedBy === undefined
+      ? myPlayerState?.playerId !== pendingAction.fromPlayerId
+      : pendingAction.blockedBy !== myPlayerState?.playerId;
+  };
+
   return (
     <div className="fixed bottom-0 left-0 right-0 lg:relative lg:bottom-auto lg:left-auto lg:right-auto bg-slate-900/95 lg:bg-slate-800 backdrop-blur-sm lg:backdrop-blur-none border-t lg:border lg:border-slate-600 rounded-t-2xl lg:rounded-2xl shadow-2xl z-10">
       <div className="p-3 sm:p-4 space-y-3">
         {/* Pending Action Response */}
-        {pendingAction &&
-          myPlayerState?.playerId !== pendingAction.fromPlayerId && (
-            <div className="p-3 bg-gradient-to-r from-yellow-900/60 to-red-900/60 border border-yellow-500/40 rounded-lg">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div>
-                  <div className="font-bold text-yellow-300 text-sm">
-                    ⏳ {pendingAction.type}
-                  </div>
-                  <div className="text-xs text-gray-300">
-                    by{" "}
-                    {
-                      players.find(
-                        (p) => p.playerId === pendingAction.fromPlayerId,
-                      )?.name
-                    }
-                  </div>
+        {pendingAction && showPendingAction(pendingAction) && (
+          <div className="p-3 bg-gradient-to-r from-yellow-900/60 to-red-900/60 border border-yellow-500/40 rounded-lg">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <div className="font-bold text-yellow-300 text-sm">
+                  ⏳ {pendingAction.type}
+                  {pendingAction.blockedBy && " (BLOCKED)"}
                 </div>
-                <div className="flex gap-1">
-                  {/* Block button - conditionally shown based on action type and target */}
-                  {(() => {
+                <div className="text-xs text-gray-300">
+                  by{" "}
+                  {
+                    players.find(
+                      (p) => p.playerId === pendingAction.fromPlayerId,
+                    )?.name
+                  }
+                  {pendingAction.blockedBy && (
+                    <>
+                      {" • blocked by "}
+                      {
+                        players.find(
+                          (p) => p.playerId === pendingAction.blockedBy,
+                        )?.name
+                      }
+                      {pendingAction.blockingCard &&
+                        ` with ${pendingAction.blockingCard}`}
+                    </>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-1">
+                {/* Block button - conditionally shown based on action type and target */}
+                {!pendingAction.blockedBy &&
+                  (() => {
                     const actionType = pendingAction.type;
                     // Show block button based on game rules
                     if (actionType === "FOREIGN_AID") {
@@ -186,7 +205,10 @@ export const ResponsiveActionPanel: React.FC<ResponsiveActionPanelProps> = ({
                           🛡️ Block
                         </button>
                       );
-                    } else if (actionType === "ASSASSINATE" && pendingAction.toPlayerId === myPlayerState?.playerId) {
+                    } else if (
+                      actionType === "ASSASSINATE" &&
+                      pendingAction.toPlayerId === myPlayerState?.playerId
+                    ) {
                       // Only target can block Assassinate with Contessa
                       return (
                         <button
@@ -195,7 +217,10 @@ export const ResponsiveActionPanel: React.FC<ResponsiveActionPanelProps> = ({
                           🛡️ Block
                         </button>
                       );
-                    } else if (actionType === "STEAL" && pendingAction.toPlayerId === myPlayerState?.playerId) {
+                    } else if (
+                      actionType === "STEAL" &&
+                      pendingAction.toPlayerId === myPlayerState?.playerId
+                    ) {
                       // Only target can block Steal with Ambassador/Captain
                       return (
                         <button
@@ -208,34 +233,52 @@ export const ResponsiveActionPanel: React.FC<ResponsiveActionPanelProps> = ({
                     // TAX and EXCHANGE cannot be blocked, so no block button
                     return null;
                   })()}
-                  
-                  {/* Challenge button - conditionally shown based on action type */}
-                  {(() => {
-                    const actionType = pendingAction.type;
-                    // Actions that can be challenged (require character cards)
-                    const challengeableActions = ["TAX", "ASSASSINATE", "STEAL", "EXCHANGE"];
-                    // Foreign Aid, Income, and Coup cannot be challenged
-                    if (challengeableActions.includes(actionType)) {
-                      return (
-                        <button
-                          onClick={onChallenge}
-                          className="px-2 py-1 bg-red-600 hover:bg-red-500 text-white rounded font-semibold text-xs">
-                          ⚔️ Challenge
-                        </button>
-                      );
-                    }
-                    return null;
-                  })()}
-                  
-                  <button
-                    onClick={onResolve}
-                    className="px-2 py-1 bg-green-600 hover:bg-green-500 text-white rounded font-semibold text-xs">
-                    ✓ Resolve
-                  </button>
-                </div>
+
+                {/* Challenge button - conditionally shown based on action type */}
+                {(() => {
+                  const actionType = pendingAction.type;
+                  // Actions that can be challenged (require character cards)
+                  const challengeableActions = [
+                    "TAX",
+                    "ASSASSINATE",
+                    "STEAL",
+                    "EXCHANGE",
+                  ];
+
+                  // If there's a block, show challenge button to challenge the block
+                  if (pendingAction.blockedBy && pendingAction.blockingCard) {
+                    return (
+                      <button
+                        onClick={onChallenge}
+                        className="px-2 py-1 bg-red-600 hover:bg-red-500 text-white rounded font-semibold text-xs">
+                        ⚔️ Challenge Block
+                      </button>
+                    );
+                  }
+
+                  // Otherwise, show challenge button for original action if challengeable
+                  // Foreign Aid, Income, and Coup cannot be challenged
+                  if (challengeableActions.includes(actionType)) {
+                    return (
+                      <button
+                        onClick={onChallenge}
+                        className="px-2 py-1 bg-red-600 hover:bg-red-500 text-white rounded font-semibold text-xs">
+                        ⚔️ Challenge
+                      </button>
+                    );
+                  }
+                  return null;
+                })()}
+
+                <button
+                  onClick={onResolve}
+                  className="px-2 py-1 bg-green-600 hover:bg-green-500 text-white rounded font-semibold text-xs">
+                  ✓ Resolve
+                </button>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
         {/* Player Status */}
         <div className="bg-slate-800/60 backdrop-blur-sm p-3 rounded-lg border border-slate-600/50">

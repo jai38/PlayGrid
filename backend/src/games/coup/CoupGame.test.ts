@@ -257,4 +257,84 @@ describe("CoupGame", () => {
         (game as any).checkWinner(state);
         expect(state.winner).toBe("P1");
     });
+
+    test("BLOCK should emit game:pendingAction event with BLOCK_PENDING_CHALLENGE", () => {
+        // Mock the onEvent callback
+        const mockOnEvent = jest.fn();
+        game.onEvent = mockOnEvent;
+
+        // Set up a pending FOREIGN_AID action
+        state.pendingAction = { type: "FOREIGN_AID", fromPlayerId: "P1", respondedPlayers: [] };
+        
+        // Give P2 a Duke card to block with
+        state.players[1].influence = ["Duke", "Captain"];
+
+        // P2 blocks the FOREIGN_AID action
+        const blockAction: GameAction = { type: "BLOCK", playerId: "P2" };
+        game.handleAction("room1", blockAction, state);
+
+        // Verify both events were emitted
+        expect(mockOnEvent).toHaveBeenCalledWith("room1", "coup:blockAction", {
+            action: "FOREIGN_AID",
+            blockedBy: "P2",
+            blockingCard: "Duke"
+        });
+
+        expect(mockOnEvent).toHaveBeenCalledWith("room1", "game:pendingAction", {
+            type: "BLOCK_PENDING_CHALLENGE",
+            action: "FOREIGN_AID",
+            blockedBy: "P2",
+            blockingCard: "Duke",
+            originalAction: state.pendingAction
+        });
+
+        // Verify the state was updated with block information
+        expect(state.pendingAction?.blockedBy).toBe("P2");
+        expect(state.pendingAction?.blockingCard).toBe("Duke");
+    });
+
+    test("CHOOSE_BLOCK_CARD should emit game:pendingAction event with BLOCK_PENDING_CHALLENGE", () => {
+        // Mock the onEvent callback
+        const mockOnEvent = jest.fn();
+        game.onEvent = mockOnEvent;
+
+        // Set up a pending STEAL action
+        state.pendingAction = { 
+            type: "STEAL", 
+            fromPlayerId: "P1", 
+            toPlayerId: "P2",
+            respondedPlayers: [] 
+        };
+        
+        // P3 chooses to block with Captain
+        const chooseBlockAction: GameAction = { 
+            type: "CHOOSE_BLOCK_CARD", 
+            playerId: "P3", 
+            payload: { blockingCard: "Captain" } 
+        };
+        game.handleAction("room1", chooseBlockAction, state);
+
+        // Verify both events were emitted
+        expect(mockOnEvent).toHaveBeenCalledWith("room1", "coup:blockAction", {
+            action: "STEAL",
+            blockedBy: "P3",
+            blockingCard: "Captain"
+        });
+
+        expect(mockOnEvent).toHaveBeenCalledWith("room1", "game:pendingAction", {
+            type: "BLOCK_PENDING_CHALLENGE",
+            action: "STEAL",
+            blockedBy: "P3",
+            blockingCard: "Captain",
+            originalAction: expect.objectContaining({
+                type: "STEAL",
+                fromPlayerId: "P1",
+                toPlayerId: "P2"
+            })
+        });
+
+        // Verify the state was updated with block information
+        expect(state.pendingAction?.blockedBy).toBe("P3");
+        expect(state.pendingAction?.blockingCard).toBe("Captain");
+    });
 });
