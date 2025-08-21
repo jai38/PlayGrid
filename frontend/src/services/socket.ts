@@ -84,6 +84,14 @@ export const onErrorMessage = (callback: (msg: string) => void) => {
     socket?.on("errorMessage", callback);
 };
 
+export const gameSelect = (socket: Socket | null, roomId: string, selectedGame: string, setError?: (error: string) => void) => {
+    socket?.emit("game:select", { roomId, gameId: selectedGame }, (response: any) => {
+        if (!response.success && setError) {
+            setError(response.error || "Failed to select game");
+        }
+    });
+}
+
 export const gameStart = (socket: Socket | null, roomId: string, selectedGame: string, setError: (error: string) => void) => {
 
     socket?.emit("game:start", { roomId, gameId: selectedGame }, (response: any) => {

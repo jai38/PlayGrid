@@ -4,6 +4,7 @@ import { Socket } from "socket.io-client";
 import { useSocket } from "../hooks/useSocket";
 import {
   gameStart,
+  gameSelect,
   joinRoom,
   leaveRoom,
   reconnectToRoom,
@@ -34,6 +35,7 @@ export default function Room() {
   );
   const [error, setError] = useState("");
   const [selectedGame, setSelectedGame] = useState<string | null>(null);
+  const [hostSelectedGame, setHostSelectedGame] = useState<{ gameId: string; hostName: string } | null>(null);
 
   const setupEvents = useCallback(
     (socket: Socket) => {
@@ -87,6 +89,11 @@ export default function Room() {
 
       socket.on("errorMessage", (msg) => {
         setError(msg);
+      });
+
+      socket.on("game:selected", (data: { gameId: string; hostName: string }) => {
+        console.log("Room component: game:selected event received:", data);
+        setHostSelectedGame(data);
       });
     },
     [roomId, navigate],
@@ -179,6 +186,13 @@ export default function Room() {
     gameStart(socket, roomId, selectedGame, setError);
   };
 
+  const handleGameSelect = (gameId: string) => {
+    setSelectedGame(gameId);
+    if (socket && roomId && isHost) {
+      gameSelect(socket, roomId, gameId, setError);
+    }
+  };
+
   const isHost = players?.find(
     (pl: any) => pl.playerId === currentPlayer?.playerId,
   )?.isHost;
@@ -223,33 +237,43 @@ export default function Room() {
         ))}
       </ul>
 
-      {isHost && (
-        <div className="mt-6 space-y-4">
-          <div>
-            <h4 className="text-lg font-semibold mb-2">Select a Game</h4>
-            <div className="flex gap-2 flex-wrap">
-              {AVAILABLE_GAMES.map((game) => (
-                <button
-                  key={game.id}
-                  onClick={() => setSelectedGame(game.id)}
-                  className={`px-4 py-2 rounded-lg border transition ${
-                    selectedGame === game.id
-                      ? "bg-blue-500 text-white border-blue-400"
-                      : "bg-gray-700 text-white border-gray-500"
-                  }`}>
-                  {game.name}
-                </button>
-              ))}
-            </div>
+      {/* Game Selection Section - visible to all players */}
+      <div className="mt-6 space-y-4">
+        <div>
+          <h4 className="text-lg font-semibold mb-2">Available Games</h4>
+          <div className="flex gap-2 flex-wrap">
+            {AVAILABLE_GAMES.map((game) => (
+              <button
+                key={game.id}
+                onClick={() => isHost ? handleGameSelect(game.id) : undefined}
+                disabled={!isHost}
+                className={`px-4 py-2 rounded-lg border transition ${
+                  (isHost ? selectedGame : hostSelectedGame?.gameId) === game.id
+                    ? "bg-blue-500 text-white border-blue-400"
+                    : "bg-gray-700 text-white border-gray-500"
+                } ${!isHost ? "opacity-75 cursor-not-allowed" : ""}`}>
+                {game.name}
+                {hostSelectedGame?.gameId === game.id && !isHost && (
+                  <span className="ml-2 text-xs">✓</span>
+                )}
+              </button>
+            ))}
           </div>
+          {hostSelectedGame && !isHost && (
+            <p className="text-sm text-gray-300 mt-2">
+              Host has selected: <span className="text-blue-400 font-semibold">{AVAILABLE_GAMES.find(g => g.id === hostSelectedGame.gameId)?.name}</span>
+            </p>
+          )}
+        </div>
+        {isHost && (
           <button
             onClick={handleStartGame}
             disabled={!selectedGame}
             className="w-full bg-green-500 text-black font-semibold px-4 py-2 rounded-lg hover:bg-green-400 disabled:opacity-50 active:scale-95 transition">
             Start Game
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       <button
         onClick={handleLeave}
