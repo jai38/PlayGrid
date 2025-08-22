@@ -1,6 +1,7 @@
 // src/games/coup/CoupGame.ts
 import { IGame, GameAction, GameState } from "../IGame";
 import { Player } from "../../rooms";
+import { stat } from "fs";
 
 // Characters in Coup
 export type CoupCard = "Duke" | "Assassin" | "Captain" | "Ambassador" | "Contessa";
@@ -275,6 +276,10 @@ export class CoupGame implements IGame {
                 const coupTarget = this.getPlayerName(state, action.payload.targetId);
                 this.addActionLog(roomId, state, player.name, "Coup", coupTarget, `paid 7 coins to coup ${coupTarget}.`);
                 this.loseInfluence(roomId, state, action.payload.targetId);
+                // Force turn advance for Coup since it's not blockable/challengeable
+                if (!state.pendingCardLoss) {
+                    this.advanceTurn(state);
+                }
                 break;
 
             case "ASSASSINATE":
@@ -285,6 +290,9 @@ export class CoupGame implements IGame {
                     fromPlayerId: player.playerId,
                     toPlayerId: action.payload.targetId,
                     respondedPlayers: []
+                };
+                state.pendingCardLoss = {
+                    playerId: action.payload.targetId
                 };
                 this.addActionLog(roomId, state, player.name, "Assassinate", assassinateTarget, `claimed Assassin and paid 3 coins to assassinate ${assassinateTarget}.`);
                 break;
@@ -631,6 +639,8 @@ export class CoupGame implements IGame {
             console.log("Action is blocked by:", action.blockedBy);
             this.addActionLog(roomId, state, action.blockedBy, "Block", action.fromPlayerId, `blocked ${action.fromPlayerId} with ${action.blockingCard}.`);
             state.pendingAction = undefined;
+            state.pendingCardLoss = undefined;
+            this.advanceTurn(state);
             return;
         }
         const from = state.players.find(p => p.playerId === action.fromPlayerId);
@@ -685,6 +695,7 @@ export class CoupGame implements IGame {
                 break;
         }
         state.pendingAction = undefined;
+        state.pendingCardLoss = undefined;
     }
 
 
@@ -729,8 +740,11 @@ export class CoupGame implements IGame {
             return;
         }
 
-        // remove chosen card
-        player.influence = player.influence.filter((c) => c !== chosenCard);
+        // remove chosen card (only one instance)
+        const cardIndex = player.influence.indexOf(chosenCard);
+        if (cardIndex > -1) {
+            player.influence.splice(cardIndex, 1);
+        }
         player.revealedCards.push(chosenCard);
 
         if (player.influence.length === 0) {
@@ -740,7 +754,7 @@ export class CoupGame implements IGame {
 
         // Clear pending card loss and advance turn
         state.pendingCardLoss = undefined;
-        // this.advanceTurn(state);
+        this.advanceTurn(state);
     }
 
     public handleExchangeCards(roomId: string, state: CoupGameState, playerId: string, selectedCards: CoupCard[]) {

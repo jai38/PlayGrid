@@ -336,7 +336,7 @@ export const useCoupGame = (roomId: string | undefined): UseCoupGameReturn => {
         // Check if action requires target
         if (ACTIONS_REQUIRING_TARGET.includes(type as ActionType)) {
             if (!selectedTarget) {
-                setError('Please select a target first');
+                setError('Please select a target to perform this action');
                 setTimeout(() => setError(''), 2000);
                 return;
             }
