@@ -1,6 +1,7 @@
 // src/games/coup/CoupGame.ts
 import { IGame, GameAction, GameState } from "../IGame";
 import { Player } from "../../rooms";
+import { stat } from "fs";
 
 // Characters in Coup
 export type CoupCard = "Duke" | "Assassin" | "Captain" | "Ambassador" | "Contessa";
@@ -289,6 +290,9 @@ export class CoupGame implements IGame {
                     fromPlayerId: player.playerId,
                     toPlayerId: action.payload.targetId,
                     respondedPlayers: []
+                };
+                state.pendingCardLoss = {
+                    playerId: action.payload.targetId
                 };
                 this.addActionLog(roomId, state, player.name, "Assassinate", assassinateTarget, `claimed Assassin and paid 3 coins to assassinate ${assassinateTarget}.`);
                 break;
@@ -635,6 +639,8 @@ export class CoupGame implements IGame {
             console.log("Action is blocked by:", action.blockedBy);
             this.addActionLog(roomId, state, action.blockedBy, "Block", action.fromPlayerId, `blocked ${action.fromPlayerId} with ${action.blockingCard}.`);
             state.pendingAction = undefined;
+            state.pendingCardLoss = undefined;
+            this.advanceTurn(state);
             return;
         }
         const from = state.players.find(p => p.playerId === action.fromPlayerId);
@@ -689,6 +695,7 @@ export class CoupGame implements IGame {
                 break;
         }
         state.pendingAction = undefined;
+        state.pendingCardLoss = undefined;
     }
 
 
@@ -747,7 +754,7 @@ export class CoupGame implements IGame {
 
         // Clear pending card loss and advance turn
         state.pendingCardLoss = undefined;
-        // this.advanceTurn(state);
+        this.advanceTurn(state);
     }
 
     public handleExchangeCards(roomId: string, state: CoupGameState, playerId: string, selectedCards: CoupCard[]) {
