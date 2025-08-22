@@ -275,6 +275,10 @@ export class CoupGame implements IGame {
                 const coupTarget = this.getPlayerName(state, action.payload.targetId);
                 this.addActionLog(roomId, state, player.name, "Coup", coupTarget, `paid 7 coins to coup ${coupTarget}.`);
                 this.loseInfluence(roomId, state, action.payload.targetId);
+                // Force turn advance for Coup since it's not blockable/challengeable
+                if (!state.pendingCardLoss) {
+                    this.advanceTurn(state);
+                }
                 break;
 
             case "ASSASSINATE":
@@ -729,8 +733,11 @@ export class CoupGame implements IGame {
             return;
         }
 
-        // remove chosen card
-        player.influence = player.influence.filter((c) => c !== chosenCard);
+        // remove chosen card (only one instance)
+        const cardIndex = player.influence.indexOf(chosenCard);
+        if (cardIndex > -1) {
+            player.influence.splice(cardIndex, 1);
+        }
         player.revealedCards.push(chosenCard);
 
         if (player.influence.length === 0) {

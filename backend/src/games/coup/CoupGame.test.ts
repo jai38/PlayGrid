@@ -51,10 +51,13 @@ describe("CoupGame", () => {
         const p1 = state.players[0];
         p1.coins = 7;
         const targetId = state.players[1].playerId;
+        const initialTurnPlayer = state.currentTurnPlayerId;
         const action: GameAction = { type: "COUP", playerId: p1.playerId, payload: { targetId } };
         game.handleAction("room1", action, state);
         expect(p1.coins).toBe(0);
         expect(state.players[1].influence.length).toBe(1);
+        // Turn should advance after Coup
+        expect(state.currentTurnPlayerId).not.toBe(initialTurnPlayer);
     });
 
     test("ASSASSINATE should cost 3 coins and set pendingAction", () => {
@@ -162,6 +165,31 @@ describe("CoupGame", () => {
         expect(state.deck.length).toBe(11); // original 9 + 2 returned cards
     });
 
+    test("EXCHANGE_CARDS should handle duplicate cards correctly", () => {
+        // Set up exchange state with duplicate Dukes
+        state.exchangeCards = {
+            playerId: "P1",
+            cards: ["Duke", "Duke", "Captain", "Ambassador"], // 2 Dukes
+            toKeep: 2
+        };
+        
+        // Player selects 2 Dukes (both copies)
+        const action: GameAction = { 
+            type: "EXCHANGE_CARDS", 
+            playerId: "P1", 
+            payload: { selectedCards: ["Duke", "Duke"] } 
+        };
+        
+        game.handleAction("room1", action, state);
+
+        const player = state.players.find(p => p.playerId === "P1")!;
+        expect(player.influence).toEqual(["Duke", "Duke"]);
+        expect(state.exchangeCards).toBeUndefined();
+        expect(state.pendingAction).toBeUndefined();
+        // The other 2 cards should be returned to deck
+        expect(state.deck.length).toBe(11); // Original 9 cards + 2 returned cards
+    });
+
     test("EXCHANGE_CARDS should reject invalid card selection", () => {
         // Set up exchange state
         state.exchangeCards = {
@@ -206,6 +234,20 @@ describe("CoupGame", () => {
         expect(state.pendingAction?.blockedBy).toBe("P3");
         expect(state.pendingAction?.blockingCard).toBe("Captain");
         expect(state.pendingAction?.respondedPlayers).toEqual([]);
+    });
+
+    test("loseCard should only remove one card when player has duplicates", () => {
+        // Set up player with duplicate cards
+        const player = state.players.find(p => p.playerId === "P1")!;
+        player.influence = ["Captain", "Captain"]; // Player has 2 Captains
+        
+        // Player loses one Captain
+        game.loseCard("room1", state, "P1", "Captain");
+        
+        // Should only lose one Captain, not both
+        expect(player.influence).toEqual(["Captain"]);
+        expect(player.revealedCards).toEqual(["Captain"]);
+        expect(player.isAlive).toBe(true);
     });
 
     test("Enhanced Challenge system should track responses properly", () => {
