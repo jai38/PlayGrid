@@ -11,6 +11,7 @@ import {
 } from "./rooms";
 import { GameManager } from "./games/GameManager";
 import { CoupGame } from "./games/coup/CoupGame";
+import { MonopolyGame } from "./games/monopoly/MonopolyGame";
 import { GameAction } from "./games/IGame";
 
 // Improved type definitions
@@ -103,8 +104,16 @@ function sanitizeStateForAll(state: any): any {
 export function initSocket(io: Server) {
     const gameManager = new GameManager(io);
     const coup = new CoupGame();
+    const monopoly = new MonopolyGame();
+    
     gameManager.registerGame(coup);
+    gameManager.registerGame(monopoly);
+    
     coup.onEvent = (roomId: string | string[], event: any, payload: any) => {
+        io.to(roomId).emit(event, payload);
+    };
+    
+    monopoly.onEvent = (roomId: string | string[], event: any, payload: any) => {
         io.to(roomId).emit(event, payload);
     };
 
