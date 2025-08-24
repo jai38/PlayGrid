@@ -30,6 +30,17 @@ interface MonopolyGameState {
     money: number;
   };
   logs: string[];
+  gameLog?: Array<{
+    timestamp: number;
+    playerId?: string;
+    playerName?: string;
+    action: string;
+    details?: any;
+  }>;
+  freeParkingPot?: number;
+  gameRules?: {
+    freeParkingCollectsWinnings: boolean;
+  };
 }
 
 // Memoized player component for better performance
@@ -59,6 +70,7 @@ const PlayerCard = memo(
       <div className="text-sm text-gray-300 mt-1">
         Position: {player.position} | Properties: {player.properties.length}
         {player.jailTurns > 0 && ` | Jail: ${player.jailTurns} turns`}
+        {player.getOutOfJailCards > 0 && ` | 🗝️ ${player.getOutOfJailCards}`}
       </div>
     </div>
   ),
@@ -68,21 +80,61 @@ const PlayerCard = memo(
 const ActionButtons = memo(
   ({
     isMyTurn,
+    currentPlayer,
     onRollDice,
     onEndTurn,
+    onPayJailFine,
+    onUseJailCard,
   }: {
     isMyTurn: boolean;
+    currentPlayer: MonopolyPlayer | undefined;
     onRollDice: () => void;
     onEndTurn: () => void;
+    onPayJailFine: () => void;
+    onUseJailCard: () => void;
   }) => (
     <div className="space-y-2">
       {isMyTurn && (
         <>
-          <button
-            onClick={onRollDice}
-            className="w-full bg-green-500 hover:bg-green-400 p-3 rounded font-medium transition-colors">
-            Roll Dice
-          </button>
+          {/* Jail Actions */}
+          {currentPlayer?.jailTurns > 0 && (
+            <div className="bg-red-900/30 p-3 rounded">
+              <p className="text-yellow-400 text-sm mb-2">
+                In Jail (Turn {currentPlayer.jailTurns}/3)
+              </p>
+              <div className="space-y-2">
+                <button
+                  onClick={onRollDice}
+                  className="w-full bg-blue-500 hover:bg-blue-400 p-2 rounded text-sm transition-colors">
+                  Roll for Doubles
+                </button>
+                {currentPlayer.money >= 50 && (
+                  <button
+                    onClick={onPayJailFine}
+                    className="w-full bg-yellow-500 hover:bg-yellow-400 p-2 rounded text-sm transition-colors">
+                    Pay $50 Fine
+                  </button>
+                )}
+                {currentPlayer.getOutOfJailCards > 0 && (
+                  <button
+                    onClick={onUseJailCard}
+                    className="w-full bg-purple-500 hover:bg-purple-400 p-2 rounded text-sm transition-colors">
+                    Use Get Out of Jail Free Card
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+          
+          {/* Normal Actions */}
+          {currentPlayer?.jailTurns === 0 && (
+            <button
+              onClick={onRollDice}
+              className="w-full bg-green-500 hover:bg-green-400 p-3 rounded font-medium transition-colors">
+              Roll Dice
+            </button>
+          )}
+          
           <button
             onClick={onEndTurn}
             className="w-full bg-blue-500 hover:bg-blue-400 p-3 rounded font-medium transition-colors">
@@ -145,6 +197,30 @@ export default function MonopolyUI() {
     });
   }, [socket, state, roomId, currentPlayer.playerId]);
 
+  const handlePayJailFine = useCallback(() => {
+    if (!socket || !state) return;
+    socket.emit("game:action", {
+      roomId,
+      gameId: "monopoly",
+      action: {
+        type: "PAY_JAIL_FINE",
+        playerId: currentPlayer.playerId,
+      },
+    });
+  }, [socket, state, roomId, currentPlayer.playerId]);
+
+  const handleUseJailCard = useCallback(() => {
+    if (!socket || !state) return;
+    socket.emit("game:action", {
+      roomId,
+      gameId: "monopoly",
+      action: {
+        type: "USE_JAIL_CARD",
+        playerId: currentPlayer.playerId,
+      },
+    });
+  }, [socket, state, roomId, currentPlayer.playerId]);
+
   // Memoize computed values
   const currentPlayerData = useMemo(
     () => state?.players.find(p => p.playerId === state.currentTurnPlayerId),
@@ -192,23 +268,46 @@ export default function MonopolyUI() {
           <h3 className="font-semibold mb-3">Game Actions</h3>
           <ActionButtons
             isMyTurn={isMyTurn}
+            currentPlayer={currentPlayerData}
             onRollDice={handleRollDice}
             onEndTurn={handleEndTurn}
+            onPayJailFine={handlePayJailFine}
+            onUseJailCard={handleUseJailCard}
           />
 
-          {state.dice && (
-            <div className="mt-4 p-3 bg-gray-700 rounded">
-              <p className="text-center">
-                Dice: {state.dice[0]} + {state.dice[1]} = {state.dice[0] + state.dice[1]}
-                {state.dice[0] === state.dice[1] && " (Doubles!)"}
-              </p>
-              {state.doublesCount > 0 && (
-                <p className="text-center text-yellow-400 text-sm">
-                  Doubles count: {state.doublesCount}
+          {/* Game Status Information */}
+          <div className="mt-4 space-y-2">
+            {/* Dice Display */}
+            {state.dice && (
+              <div className="p-3 bg-gray-700 rounded">
+                <p className="text-center">
+                  Dice: {state.dice[0]} + {state.dice[1]} = {state.dice[0] + state.dice[1]}
+                  {state.dice[0] === state.dice[1] && " (Doubles!)"}
                 </p>
-              )}
+                {state.doublesCount > 0 && (
+                  <p className="text-center text-yellow-400 text-sm">
+                    Doubles count: {state.doublesCount}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Free Parking Pot */}
+            {state.freeParkingPot !== undefined && state.freeParkingPot > 0 && (
+              <div className="p-3 bg-green-900/30 rounded">
+                <p className="text-center text-green-400">
+                  🅿️ Free Parking Pot: ${state.freeParkingPot}
+                </p>
+              </div>
+            )}
+
+            {/* Bank Inventory */}
+            <div className="p-3 bg-gray-700 rounded">
+              <p className="text-center text-sm">
+                🏦 Bank: 🏠 {state.bank.houses} houses | 🏨 {state.bank.hotels} hotels
+              </p>
             </div>
-          )}
+          </div>
         </div>
       </div>
 
