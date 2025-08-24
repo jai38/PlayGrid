@@ -373,4 +373,59 @@ describe('MonopolyGame Phase 1 Tests', () => {
             expect(game.validateAction(action, gameState)).toBe(false);
         });
     });
+
+    // CORE-015: Auction Mechanic Tests
+    describe('CORE-015: Auction Mechanic', () => {
+        test('should initialize without active auction', () => {
+            expect(gameState.auction).toBeUndefined();
+        });
+
+        test('should start auction when purchase declined', () => {
+            gameState.players[0].position = 1; // Mediterranean Avenue
+            const action = { type: 'DECLINE_PURCHASE', playerId: 'player1' };
+            
+            expect(game.validateAction(action, gameState)).toBe(true);
+            const newState = game.handleAction('test-room', action, gameState);
+            
+            expect(newState.auction).toBeDefined();
+            expect(newState.auction!.active).toBe(true);
+            expect(newState.auction!.propertyId).toBe(1);
+        });
+    });
+
+    // CORE-016: Trade System Tests
+    describe('CORE-016: Trade System', () => {
+        test('should initialize with empty trades array', () => {
+            expect(gameState.activeTrades).toEqual([]);
+        });
+
+        test('should validate trade offer with sufficient assets', () => {
+            gameState.players[0].money = 500;
+            gameState.players[0].properties = [1, 3];
+            
+            const action = {
+                type: 'TRADE_OFFER',
+                playerId: 'player1',
+                payload: {
+                    toPlayerId: 'player2',
+                    fromOffer: { money: 100, properties: [1], getOutOfJailCards: 0 },
+                    toOffer: { money: 50, properties: [], getOutOfJailCards: 0 }
+                }
+            };
+            
+            expect(game.validateAction(action, gameState)).toBe(true);
+        });
+    });
+
+    // CORE-018: Undo System Tests
+    describe('CORE-018: Undo System', () => {
+        test('should initialize with empty pending actions', () => {
+            expect(gameState.pendingActions).toEqual({});
+        });
+
+        test('should reject undo when no actions pending', () => {
+            const action = { type: 'UNDO_ACTION', playerId: 'player1' };
+            expect(game.validateAction(action, gameState)).toBe(false);
+        });
+    });
 });

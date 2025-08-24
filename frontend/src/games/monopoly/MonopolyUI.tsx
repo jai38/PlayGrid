@@ -42,6 +42,18 @@ interface MonopolyGameState {
   gameRules?: {
     freeParkingCollectsWinnings: boolean;
   };
+  auction?: {
+    active: boolean;
+    propertyId: number;
+    propertyName: string;
+    currentBid: number;
+    currentBidder?: string;
+    participants: string[];
+    timeRemaining: number;
+    passedPlayers: string[];
+  };
+  pendingActions?: Record<string, any[]>;
+  activeTrades?: any[];
 }
 
 // Memoized player component for better performance
@@ -222,6 +234,43 @@ export default function MonopolyUI() {
     });
   }, [socket, state, roomId, currentPlayer.playerId]);
 
+  const handleUndo = useCallback(() => {
+    if (!socket || !state) return;
+    socket.emit("game:action", {
+      roomId,
+      gameId: "monopoly",
+      action: {
+        type: "UNDO_ACTION",
+        playerId: currentPlayer.playerId,
+      },
+    });
+  }, [socket, state, roomId, currentPlayer.playerId]);
+
+  const handleAuctionBid = useCallback((bidAmount: number) => {
+    if (!socket || !state) return;
+    socket.emit("game:action", {
+      roomId,
+      gameId: "monopoly",
+      action: {
+        type: "AUCTION_BID",
+        playerId: currentPlayer.playerId,
+        payload: { bidAmount },
+      },
+    });
+  }, [socket, state, roomId, currentPlayer.playerId]);
+
+  const handleAuctionPass = useCallback(() => {
+    if (!socket || !state) return;
+    socket.emit("game:action", {
+      roomId,
+      gameId: "monopoly",
+      action: {
+        type: "AUCTION_PASS",
+        playerId: currentPlayer.playerId,
+      },
+    });
+  }, [socket, state, roomId, currentPlayer.playerId]);
+
   // Memoize computed values
   const currentPlayerData = useMemo(
     () => state?.players.find(p => p.playerId === state.currentTurnPlayerId),
@@ -308,6 +357,65 @@ export default function MonopolyUI() {
                 🏦 Bank: 🏠 {state.bank.houses} houses | 🏨 {state.bank.hotels} hotels
               </p>
             </div>
+
+            {/* Undo Actions */}
+            {state.pendingActions && state.pendingActions[currentPlayer.playerId]?.length > 0 && (
+              <div className="p-3 bg-gray-700 rounded">
+                <button
+                  onClick={handleUndo}
+                  className="w-full bg-orange-500 hover:bg-orange-400 p-2 rounded text-sm transition-colors">
+                  ↶ Undo Last Action ({state.pendingActions[currentPlayer.playerId].length})
+                </button>
+              </div>
+            )}
+
+            {/* Auction */}
+            {state.auction && state.auction.active && (
+              <div className="p-3 bg-yellow-900/30 rounded border border-yellow-500">
+                <p className="text-yellow-400 text-center font-semibold mb-2">
+                  🔨 AUCTION: {state.auction.propertyName}
+                </p>
+                <p className="text-center text-sm mb-2">
+                  Current Bid: ${state.auction.currentBid}
+                  {state.auction.currentBidder && ` by ${state.players.find(p => p.playerId === state.auction!.currentBidder)?.name}`}
+                </p>
+                {state.auction.participants.includes(currentPlayer.playerId) && 
+                 !state.auction.passedPlayers.includes(currentPlayer.playerId) && (
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        min={state.auction.currentBid + 1}
+                        max={currentPlayerData?.money || 0}
+                        placeholder="Bid amount"
+                        className="flex-1 px-2 py-1 rounded text-black"
+                        id="auction-bid-input"
+                      />
+                      <button
+                        onClick={() => {
+                          const input = document.getElementById('auction-bid-input') as HTMLInputElement;
+                          const bidAmount = parseInt(input.value);
+                          if (bidAmount > state.auction!.currentBid) {
+                            handleAuctionBid(bidAmount);
+                            input.value = '';
+                          }
+                        }}
+                        className="bg-green-500 hover:bg-green-400 px-3 py-1 rounded text-sm transition-colors">
+                        Bid
+                      </button>
+                    </div>
+                    <button
+                      onClick={handleAuctionPass}
+                      className="w-full bg-red-500 hover:bg-red-400 p-2 rounded text-sm transition-colors">
+                      Pass
+                    </button>
+                  </div>
+                )}
+                {state.auction.passedPlayers.includes(currentPlayer.playerId) && (
+                  <p className="text-center text-gray-400 text-sm">You have passed on this auction</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -53,6 +53,45 @@ export interface MonopolyPlayer extends Player {
     mortgagedProperties: number[]; // CORE-013/014: Track mortgaged properties
 }
 
+// CORE-016: Trade System
+export interface TradeOffer {
+    id: string;
+    fromPlayerId: string;
+    toPlayerId: string;
+    fromOffer: {
+        money: number;
+        properties: number[];
+        getOutOfJailCards: number;
+    };
+    toOffer: {
+        money: number;
+        properties: number[];
+        getOutOfJailCards: number;
+    };
+    status: 'PENDING' | 'ACCEPTED' | 'DECLINED';
+    timestamp: number;
+}
+
+// CORE-018: Undo (Pre-Commit) Buffer
+export interface UndoableAction {
+    type: string;
+    playerId: string;
+    payload?: any;
+    timestamp: number;
+}
+
+// CORE-015: Auction state
+export interface AuctionState {
+    active: boolean;
+    propertyId: number;
+    propertyName: string;
+    currentBid: number;
+    currentBidder?: string;
+    participants: string[];
+    timeRemaining: number;
+    passedPlayers: string[];
+}
+
 // CORE-019: Game Log Entry with timestamps and player refs
 export interface GameLogEntry {
     timestamp: number;
@@ -80,6 +119,9 @@ export interface MonopolyGameState extends GameState {
     gameRules: {
         freeParkingCollectsWinnings: boolean; // CORE-011: House rule configuration
     };
+    auction?: AuctionState; // CORE-015: Current auction state
+    pendingActions: Record<string, UndoableAction[]>; // CORE-018: Per-player undo buffer
+    activeTrades: TradeOffer[]; // CORE-016: Active trade offers
 }
 
 export class MonopolyGame implements IGame {
@@ -179,7 +221,9 @@ export class MonopolyGame implements IGame {
             freeParkingPot: 0, // CORE-011: Initialize Free Parking pot
             gameRules: {
                 freeParkingCollectsWinnings: false // CORE-011: Default to standard rules
-            }
+            },
+            pendingActions: {}, // CORE-018: Initialize undo buffer
+            activeTrades: [] // CORE-016: Initialize trade system
         };
 
         // CORE-019: Add initial game log entry
@@ -274,6 +318,10 @@ export class MonopolyGame implements IGame {
                 return this.validatePropertyPurchase(state, player);
             case "AUCTION_BID": // CORE-015: Auction bidding
                 return this.validateAuctionBid(action, state, player);
+            case "AUCTION_PASS": // CORE-015: Pass on auction
+                return state.auction?.active === true && 
+                       state.auction.participants.includes(player.playerId) &&
+                       !state.auction.passedPlayers.includes(player.playerId);
             case "END_TURN":
                 return true; // Current player can always end turn
             case "BUILD_HOUSE":
@@ -286,6 +334,8 @@ export class MonopolyGame implements IGame {
             case "TRADE_ACCEPT":
             case "TRADE_DECLINE":
                 return this.validateTrade(action, state, player);
+            case "UNDO_ACTION": // CORE-018: Undo validation
+                return state.pendingActions[player.playerId]?.length > 0;
             default:
                 this.addGameLogEntry(state, `Illegal action attempted - unknown action type: ${action.type}`, action.playerId);
                 return false;
@@ -308,6 +358,8 @@ export class MonopolyGame implements IGame {
                 return this.handleDeclinePurchase(newState, action.playerId);
             case "AUCTION_BID": // CORE-015: Auction bidding
                 return this.handleAuctionBid(newState, action);
+            case "AUCTION_PASS": // CORE-015: Pass on auction
+                return this.handleAuctionPass(newState, action.playerId);
             case "END_TURN":
                 return this.handleEndTurn(newState);
             case "BUILD_HOUSE":
@@ -324,6 +376,8 @@ export class MonopolyGame implements IGame {
                 return this.handleTradeAccept(newState, action);
             case "TRADE_DECLINE":
                 return this.handleTradeDecline(newState, action);
+            case "UNDO_ACTION": // CORE-018: Undo last action
+                return this.handleUndo(newState, action.playerId);
             default:
                 return newState;
         }
@@ -636,6 +690,14 @@ export class MonopolyGame implements IGame {
             return state;
         }
         
+        // CORE-018: Add to undo buffer before making changes
+        this.addPendingAction(state, {
+            type: 'BUILD_HOUSE',
+            playerId: action.playerId,
+            payload: action.payload,
+            timestamp: Date.now()
+        });
+        
         player.money -= cost;
         state.bank.money += cost;
         state.bank.houses--;
@@ -668,6 +730,14 @@ export class MonopolyGame implements IGame {
             });
             return state;
         }
+        
+        // CORE-018: Add to undo buffer before making changes
+        this.addPendingAction(state, {
+            type: 'BUILD_HOTEL',
+            playerId: action.playerId,
+            payload: action.payload,
+            timestamp: Date.now()
+        });
         
         player.money -= cost;
         state.bank.money += cost;
@@ -716,6 +786,14 @@ export class MonopolyGame implements IGame {
         const player = state.players.find(p => p.playerId === action.playerId)!;
         const propertyId = action.payload.propertyId;
         const space = state.board[propertyId];
+        
+        // CORE-018: Add to undo buffer before making changes
+        this.addPendingAction(state, {
+            type: 'MORTGAGE_PROPERTY',
+            playerId: action.playerId,
+            payload: action.payload,
+            timestamp: Date.now()
+        });
         
         const mortgageValue = space.mortgage || 0;
         player.money += mortgageValue;
@@ -826,9 +904,147 @@ export class MonopolyGame implements IGame {
         return state;
     }
 
-    // CORE-015: Auction Mechanic (stub implementations for now)
+    // CORE-018: Undo (Pre-Commit) Buffer
+    private addPendingAction(state: MonopolyGameState, action: UndoableAction): void {
+        if (!state.pendingActions[action.playerId]) {
+            state.pendingActions[action.playerId] = [];
+        }
+        
+        // Only allow certain actions to be undoable
+        const undoableActions = ['BUILD_HOUSE', 'BUILD_HOTEL', 'MORTGAGE_PROPERTY'];
+        if (undoableActions.includes(action.type)) {
+            state.pendingActions[action.playerId].push(action);
+            
+            // Limit buffer size to last 3 actions
+            if (state.pendingActions[action.playerId].length > 3) {
+                state.pendingActions[action.playerId].shift();
+            }
+            
+            this.addGameLogEntry(state, `action ${action.type} added to undo buffer`, action.playerId, {
+                actionType: action.type,
+                bufferSize: state.pendingActions[action.playerId].length
+            });
+        }
+    }
+
+    private handleUndo(state: MonopolyGameState, playerId: string): MonopolyGameState {
+        if (!state.pendingActions[playerId] || state.pendingActions[playerId].length === 0) {
+            this.addGameLogEntry(state, "No actions to undo", playerId);
+            return state;
+        }
+        
+        const lastAction = state.pendingActions[playerId].pop()!;
+        
+        // Reverse the action
+        switch (lastAction.type) {
+            case 'BUILD_HOUSE':
+                this.reverseBuildHouse(state, lastAction);
+                break;
+            case 'BUILD_HOTEL':
+                this.reverseBuildHotel(state, lastAction);
+                break;
+            case 'MORTGAGE_PROPERTY':
+                this.reverseMortgageProperty(state, lastAction);
+                break;
+        }
+        
+        this.addGameLogEntry(state, `undid action: ${lastAction.type}`, playerId, {
+            actionType: lastAction.type,
+            remainingActions: state.pendingActions[playerId].length
+        });
+        
+        return state;
+    }
+
+    private reverseBuildHouse(state: MonopolyGameState, action: UndoableAction): void {
+        const player = state.players.find(p => p.playerId === action.playerId)!;
+        const propertyId = action.payload.propertyId;
+        const space = state.board[propertyId];
+        
+        // Remove house and refund money
+        const houses = player.houses[propertyId] || 0;
+        if (houses > 0) {
+            player.houses[propertyId] = houses - 1;
+            if (player.houses[propertyId] === 0) {
+                delete player.houses[propertyId];
+            }
+            
+            const cost = space.houseCost || 0;
+            player.money += cost;
+            state.bank.money -= cost;
+            state.bank.houses++;
+        }
+    }
+
+    private reverseBuildHotel(state: MonopolyGameState, action: UndoableAction): void {
+        const player = state.players.find(p => p.playerId === action.playerId)!;
+        const propertyId = action.payload.propertyId;
+        const space = state.board[propertyId];
+        
+        // Remove hotel and refund money, add back 4 houses
+        const hotelIndex = player.hotels.indexOf(propertyId);
+        if (hotelIndex !== -1) {
+            player.hotels.splice(hotelIndex, 1);
+            player.houses[propertyId] = 4;
+            
+            const cost = space.hotelCost || space.houseCost || 0;
+            player.money += cost;
+            state.bank.money -= cost;
+            state.bank.hotels++;
+            state.bank.houses -= 4;
+        }
+    }
+
+    private reverseMortgageProperty(state: MonopolyGameState, action: UndoableAction): void {
+        const player = state.players.find(p => p.playerId === action.playerId)!;
+        const propertyId = action.payload.propertyId;
+        const space = state.board[propertyId];
+        
+        // Unmortgage property and take back money
+        const mortgageIndex = player.mortgagedProperties.indexOf(propertyId);
+        if (mortgageIndex !== -1) {
+            player.mortgagedProperties.splice(mortgageIndex, 1);
+            player.properties.push(propertyId);
+            
+            const mortgageValue = space.mortgage || 0;
+            player.money -= mortgageValue;
+            state.bank.money += mortgageValue;
+        }
+    }
+
+    // CORE-015: Auction Mechanic
     private validateAuctionBid(action: GameAction, state: MonopolyGameState, player: MonopolyPlayer): boolean {
-        // TODO: Implement auction validation
+        if (!state.auction || !state.auction.active) {
+            this.addGameLogEntry(state, "Illegal auction bid - no active auction", action.playerId);
+            return false;
+        }
+        
+        const bidAmount = action.payload?.bidAmount || 0;
+        
+        // Must bid higher than current bid
+        if (bidAmount <= state.auction.currentBid) {
+            this.addGameLogEntry(state, `Illegal auction bid - bid too low (current: $${state.auction.currentBid})`, action.playerId);
+            return false;
+        }
+        
+        // Must have enough money
+        if (player.money < bidAmount) {
+            this.addGameLogEntry(state, "Illegal auction bid - insufficient funds", action.playerId);
+            return false;
+        }
+        
+        // Must be participating in auction
+        if (!state.auction.participants.includes(player.playerId)) {
+            this.addGameLogEntry(state, "Illegal auction bid - not participating in auction", action.playerId);
+            return false;
+        }
+        
+        // Must not have already passed
+        if (state.auction.passedPlayers.includes(player.playerId)) {
+            this.addGameLogEntry(state, "Illegal auction bid - already passed", action.playerId);
+            return false;
+        }
+        
         return true;
     }
 
@@ -842,33 +1058,219 @@ export class MonopolyGame implements IGame {
             price: space.price
         });
         
-        // TODO: Start auction process
+        // CORE-015: Start auction process
+        this.startAuction(state, space);
+        
         return state;
+    }
+
+    private startAuction(state: MonopolyGameState, property: BoardSpace): void {
+        const eligiblePlayers = state.players.filter(p => !p.bankrupt).map(p => p.playerId);
+        
+        state.auction = {
+            active: true,
+            propertyId: property.id,
+            propertyName: property.name,
+            currentBid: 0,
+            participants: eligiblePlayers,
+            timeRemaining: 60, // 60 seconds for auction
+            passedPlayers: []
+        };
+        
+        this.addGameLogEntry(state, `Auction started for ${property.name}`, undefined, {
+            propertyId: property.id,
+            propertyName: property.name,
+            startingBid: 0,
+            participants: eligiblePlayers.length
+        });
     }
 
     private handleAuctionBid(state: MonopolyGameState, action: GameAction): MonopolyGameState {
-        // TODO: Implement auction bidding
+        if (!state.auction) return state;
+        
+        const bidAmount = action.payload.bidAmount;
+        const player = state.players.find(p => p.playerId === action.playerId)!;
+        
+        state.auction.currentBid = bidAmount;
+        state.auction.currentBidder = player.playerId;
+        
+        this.addGameLogEntry(state, `bid $${bidAmount} in auction for ${state.auction.propertyName}`, action.playerId, {
+            bidAmount,
+            propertyId: state.auction.propertyId,
+            propertyName: state.auction.propertyName
+        });
+        
+        // Check if auction should end (all other players passed)
+        const activeBidders = state.auction.participants.filter(p => 
+            !state.auction!.passedPlayers.includes(p) && p !== action.playerId
+        );
+        
+        if (activeBidders.length === 0) {
+            this.endAuction(state);
+        }
+        
         return state;
     }
 
-    // CORE-016: Trade System (stub implementations for now)
+    private handleAuctionPass(state: MonopolyGameState, playerId: string): MonopolyGameState {
+        if (!state.auction) return state;
+        
+        state.auction.passedPlayers.push(playerId);
+        
+        const player = state.players.find(p => p.playerId === playerId)!;
+        this.addGameLogEntry(state, `passed on auction for ${state.auction.propertyName}`, playerId, {
+            propertyId: state.auction.propertyId,
+            propertyName: state.auction.propertyName
+        });
+        
+        // Check if auction should end
+        const activeBidders = state.auction.participants.filter(p => 
+            !state.auction!.passedPlayers.includes(p)
+        );
+        
+        if (activeBidders.length <= 1) {
+            this.endAuction(state);
+        }
+        
+        return state;
+    }
+
+    private endAuction(state: MonopolyGameState): void {
+        if (!state.auction) return;
+        
+        if (state.auction.currentBidder && state.auction.currentBid > 0) {
+            // Auction won
+            const winner = state.players.find(p => p.playerId === state.auction!.currentBidder)!;
+            winner.money -= state.auction.currentBid;
+            winner.properties.push(state.auction.propertyId);
+            state.bank.money += state.auction.currentBid;
+            
+            this.addGameLogEntry(state, `won auction for ${state.auction.propertyName} with bid of $${state.auction.currentBid}`, winner.playerId, {
+                propertyId: state.auction.propertyId,
+                propertyName: state.auction.propertyName,
+                winningBid: state.auction.currentBid,
+                newMoney: winner.money
+            });
+        } else {
+            // No bids - property returns to bank
+            this.addGameLogEntry(state, `Auction for ${state.auction.propertyName} ended with no bids`, undefined, {
+                propertyId: state.auction.propertyId,
+                propertyName: state.auction.propertyName
+            });
+        }
+        
+        state.auction = undefined;
+    }
+
+    // CORE-016: Trade System (basic implementation)
     private validateTrade(action: GameAction, state: MonopolyGameState, player: MonopolyPlayer): boolean {
-        // TODO: Implement trade validation
-        return true;
+        switch (action.type) {
+            case 'TRADE_OFFER':
+                // Basic validation - player has the assets they're offering
+                const offer = action.payload;
+                return player.money >= offer.fromOffer.money &&
+                       player.getOutOfJailCards >= offer.fromOffer.getOutOfJailCards &&
+                       offer.fromOffer.properties.every((propId: number) => player.properties.includes(propId));
+                       
+            case 'TRADE_ACCEPT':
+            case 'TRADE_DECLINE':
+                // Must have a pending trade to them
+                return state.activeTrades.some(trade => 
+                    trade.toPlayerId === player.playerId && trade.status === 'PENDING'
+                );
+                
+            default:
+                return false;
+        }
     }
 
     private handleTradeOffer(state: MonopolyGameState, action: GameAction): MonopolyGameState {
-        // TODO: Implement trade offer
+        const tradeOffer: TradeOffer = {
+            id: `trade_${Date.now()}_${action.playerId}`,
+            fromPlayerId: action.playerId,
+            toPlayerId: action.payload.toPlayerId,
+            fromOffer: action.payload.fromOffer,
+            toOffer: action.payload.toOffer,
+            status: 'PENDING',
+            timestamp: Date.now()
+        };
+        
+        state.activeTrades.push(tradeOffer);
+        
+        const fromPlayer = state.players.find(p => p.playerId === action.playerId)!;
+        const toPlayer = state.players.find(p => p.playerId === action.payload.toPlayerId)!;
+        
+        this.addGameLogEntry(state, `offered trade to ${toPlayer.name}`, action.playerId, {
+            tradeId: tradeOffer.id,
+            toPlayerId: toPlayer.playerId,
+            toPlayerName: toPlayer.name,
+            fromOffer: tradeOffer.fromOffer,
+            toOffer: tradeOffer.toOffer
+        });
+        
         return state;
     }
 
     private handleTradeAccept(state: MonopolyGameState, action: GameAction): MonopolyGameState {
-        // TODO: Implement trade acceptance
+        const tradeId = action.payload.tradeId;
+        const trade = state.activeTrades.find(t => t.id === tradeId);
+        
+        if (trade && trade.status === 'PENDING') {
+            // Execute the trade
+            const fromPlayer = state.players.find(p => p.playerId === trade.fromPlayerId)!;
+            const toPlayer = state.players.find(p => p.playerId === trade.toPlayerId)!;
+            
+            // Transfer assets
+            fromPlayer.money -= trade.fromOffer.money;
+            fromPlayer.money += trade.toOffer.money;
+            toPlayer.money -= trade.toOffer.money;
+            toPlayer.money += trade.fromOffer.money;
+            
+            // Transfer properties (simplified)
+            trade.fromOffer.properties.forEach(propId => {
+                fromPlayer.properties = fromPlayer.properties.filter(id => id !== propId);
+                toPlayer.properties.push(propId);
+            });
+            
+            trade.toOffer.properties.forEach(propId => {
+                toPlayer.properties = toPlayer.properties.filter(id => id !== propId);
+                fromPlayer.properties.push(propId);
+            });
+            
+            // Transfer Get Out of Jail Free cards
+            fromPlayer.getOutOfJailCards -= trade.fromOffer.getOutOfJailCards;
+            fromPlayer.getOutOfJailCards += trade.toOffer.getOutOfJailCards;
+            toPlayer.getOutOfJailCards -= trade.toOffer.getOutOfJailCards;
+            toPlayer.getOutOfJailCards += trade.fromOffer.getOutOfJailCards;
+            
+            trade.status = 'ACCEPTED';
+            
+            this.addGameLogEntry(state, `accepted trade from ${fromPlayer.name}`, trade.toPlayerId, {
+                tradeId: trade.id,
+                fromPlayerId: fromPlayer.playerId,
+                fromPlayerName: fromPlayer.name
+            });
+        }
+        
         return state;
     }
 
     private handleTradeDecline(state: MonopolyGameState, action: GameAction): MonopolyGameState {
-        // TODO: Implement trade decline
+        const tradeId = action.payload.tradeId;
+        const trade = state.activeTrades.find(t => t.id === tradeId);
+        
+        if (trade && trade.status === 'PENDING') {
+            trade.status = 'DECLINED';
+            
+            const fromPlayer = state.players.find(p => p.playerId === trade.fromPlayerId)!;
+            
+            this.addGameLogEntry(state, `declined trade from ${fromPlayer.name}`, trade.toPlayerId, {
+                tradeId: trade.id,
+                fromPlayerId: fromPlayer.playerId,
+                fromPlayerName: fromPlayer.name
+            });
+        }
+        
         return state;
     }
 
