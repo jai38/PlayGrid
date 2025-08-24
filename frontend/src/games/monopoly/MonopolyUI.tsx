@@ -15,6 +15,7 @@ interface MonopolyPlayer {
   jailTurns: number;
   getOutOfJailCards: number;
   bankrupt: boolean;
+  mortgagedProperties?: number[];
 }
 
 interface MonopolyGameState {
@@ -47,9 +48,7 @@ interface MonopolyGameState {
 const PlayerCard = memo(
   ({
     player,
-    index,
     isCurrentPlayer,
-    isMyTurn,
   }: {
     player: MonopolyPlayer;
     index: number;
@@ -69,8 +68,10 @@ const PlayerCard = memo(
       </div>
       <div className="text-sm text-gray-300 mt-1">
         Position: {player.position} | Properties: {player.properties.length}
+        {player.mortgagedProperties && player.mortgagedProperties.length > 0 && ` | Mortgaged: ${player.mortgagedProperties.length}`}
         {player.jailTurns > 0 && ` | Jail: ${player.jailTurns} turns`}
         {player.getOutOfJailCards > 0 && ` | 🗝️ ${player.getOutOfJailCards}`}
+        {player.bankrupt && ` | 💀 BANKRUPT`}
       </div>
     </div>
   ),
@@ -97,7 +98,7 @@ const ActionButtons = memo(
       {isMyTurn && (
         <>
           {/* Jail Actions */}
-          {currentPlayer?.jailTurns > 0 && (
+          {currentPlayer && currentPlayer.jailTurns > 0 && (
             <div className="bg-red-900/30 p-3 rounded">
               <p className="text-yellow-400 text-sm mb-2">
                 In Jail (Turn {currentPlayer.jailTurns}/3)
@@ -127,7 +128,7 @@ const ActionButtons = memo(
           )}
           
           {/* Normal Actions */}
-          {currentPlayer?.jailTurns === 0 && (
+          {currentPlayer && currentPlayer.jailTurns === 0 && (
             <button
               onClick={onRollDice}
               className="w-full bg-green-500 hover:bg-green-400 p-3 rounded font-medium transition-colors">
@@ -149,7 +150,7 @@ const ActionButtons = memo(
 export default function MonopolyUI() {
   const { roomId } = useParams<{ roomId: string }>();
   const [state, setState] = useState<MonopolyGameState | null>(null);
-  const [currentPlayer, setCurrentPlayer] = useState<any>(
+  const [currentPlayer] = useState<any>(
     JSON.parse(localStorage.getItem("currentPlayer") || "{}"),
   );
   const [error, setError] = useState("");
