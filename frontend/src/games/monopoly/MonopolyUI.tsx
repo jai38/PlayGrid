@@ -5,11 +5,13 @@ import { Socket } from "socket.io-client";
 import { useSocket } from "../../hooks/useSocket";
 
 interface MonopolyPlayer {
-  id: string;
+  playerId: string;
   name: string;
   position: number;
   money: number;
   properties: number[];
+  houses: Record<number, number>;
+  hotels: number[];
   jailTurns: number;
   getOutOfJailCards: number;
   bankrupt: boolean;
@@ -17,11 +19,16 @@ interface MonopolyPlayer {
 
 interface MonopolyGameState {
   players: MonopolyPlayer[];
-  currentPlayerIndex: number;
-  dice: [number, number] | null;
-  diceTotal?: number;
-  houses: Record<number, number>;
-  phase: string;
+  currentTurnPlayerId: string;
+  board: any[];
+  dice: [number, number];
+  doublesCount: number;
+  gamePhase: "WAITING" | "PLAYING" | "GAME_OVER";
+  bank: {
+    houses: number;
+    hotels: number;
+    money: number;
+  };
   logs: string[];
 }
 
@@ -140,13 +147,13 @@ export default function MonopolyUI() {
 
   // Memoize computed values
   const currentPlayerData = useMemo(
-    () => state?.players[state.currentPlayerIndex],
-    [state?.players, state?.currentPlayerIndex],
+    () => state?.players.find(p => p.playerId === state.currentTurnPlayerId),
+    [state?.players, state?.currentTurnPlayerId],
   );
 
   const isMyTurn = useMemo(
-    () => currentPlayerData?.id === currentPlayer.playerId,
-    [currentPlayerData?.id, currentPlayer.playerId],
+    () => currentPlayerData?.playerId === currentPlayer.playerId,
+    [currentPlayerData?.playerId, currentPlayer.playerId],
   );
 
   if (!state) {
@@ -170,10 +177,10 @@ export default function MonopolyUI() {
           <div className="space-y-2">
             {state.players.map((player, index) => (
               <PlayerCard
-                key={player.id}
+                key={player.playerId}
                 player={player}
                 index={index}
-                isCurrentPlayer={index === state.currentPlayerIndex}
+                isCurrentPlayer={player.playerId === state.currentTurnPlayerId}
                 isMyTurn={isMyTurn}
               />
             ))}
@@ -192,8 +199,14 @@ export default function MonopolyUI() {
           {state.dice && (
             <div className="mt-4 p-3 bg-gray-700 rounded">
               <p className="text-center">
-                Dice: {state.dice[0]} + {state.dice[1]} = {state.diceTotal}
+                Dice: {state.dice[0]} + {state.dice[1]} = {state.dice[0] + state.dice[1]}
+                {state.dice[0] === state.dice[1] && " (Doubles!)"}
               </p>
+              {state.doublesCount > 0 && (
+                <p className="text-center text-yellow-400 text-sm">
+                  Doubles count: {state.doublesCount}
+                </p>
+              )}
             </div>
           )}
         </div>
