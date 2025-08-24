@@ -93,6 +93,19 @@ export interface AuctionState {
 }
 
 // CORE-019: Game Log Entry with timestamps and player refs
+// CORE-021: Payment chain for multiple rents/charges in a turn
+export interface PaymentChain {
+    playerId: string;
+    payments: {
+        amount: number;
+        description: string;
+        toPlayerId?: string; // If payment is to another player
+        toBank?: boolean; // If payment is to bank
+    }[];
+    currentIndex: number;
+    totalAmount: number;
+}
+
 export interface GameLogEntry {
     timestamp: number;
     playerId?: string;
@@ -118,10 +131,13 @@ export interface MonopolyGameState extends GameState {
     freeParkingPot: number; // CORE-011: Free Parking money collection
     gameRules: {
         freeParkingCollectsWinnings: boolean; // CORE-011: House rule configuration
+        turnTimeoutSeconds: number; // CORE-022: Turn timeout configuration
     };
     auction?: AuctionState; // CORE-015: Current auction state
     pendingActions: Record<string, UndoableAction[]>; // CORE-018: Per-player undo buffer
     activeTrades: TradeOffer[]; // CORE-016: Active trade offers
+    pendingPayments: PaymentChain[]; // CORE-021: Multiple rent/payment chain
+    turnStartTime: number; // CORE-022: Track when current turn started
 }
 
 export class MonopolyGame implements IGame {
@@ -190,15 +206,15 @@ export class MonopolyGame implements IGame {
         ];
     }
 
-    initGame(roomId: string, players: Player[]): MonopolyGameState {
+    initGame(roomId: string, players: Player[], startInJail: boolean = false): MonopolyGameState {
         const monopolyPlayers: MonopolyPlayer[] = players.map(player => ({
             ...player,
-            position: 0,
+            position: startInJail ? MonopolyGame.JAIL_POSITION : 0, // CORE-029: Optional start in jail
             money: MonopolyGame.STARTING_MONEY,
             properties: [],
             houses: {},
             hotels: [],
-            jailTurns: 0,
+            jailTurns: startInJail ? 1 : 0, // CORE-029: Start with 1 jail turn if starting in jail
             getOutOfJailCards: 0,
             bankrupt: false,
             mortgagedProperties: [] // CORE-013/014: Initialize mortgaged properties
@@ -220,10 +236,13 @@ export class MonopolyGame implements IGame {
             gameLog: [], // CORE-019: Initialize structured game log
             freeParkingPot: 0, // CORE-011: Initialize Free Parking pot
             gameRules: {
-                freeParkingCollectsWinnings: false // CORE-011: Default to standard rules
+                freeParkingCollectsWinnings: false, // CORE-011: Default to standard rules
+                turnTimeoutSeconds: 60 // CORE-022: Default 60 second turns
             },
             pendingActions: {}, // CORE-018: Initialize undo buffer
-            activeTrades: [] // CORE-016: Initialize trade system
+            activeTrades: [], // CORE-016: Initialize trade system
+            pendingPayments: [], // CORE-021: Initialize payment chain
+            turnStartTime: Date.now() // CORE-022: Initialize turn timer
         };
 
         // CORE-019: Add initial game log entry
@@ -274,6 +293,34 @@ export class MonopolyGame implements IGame {
         }
     }
 
+    // CORE-022: Turn timeout validation
+    private isTurnExpired(state: MonopolyGameState): boolean {
+        const timeElapsed = (Date.now() - state.turnStartTime) / 1000;
+        return timeElapsed > state.gameRules.turnTimeoutSeconds;
+    }
+
+    // CORE-022: Handle automatic turn progression on timeout
+    private handleTurnTimeout(state: MonopolyGameState): MonopolyGameState {
+        const currentPlayer = state.players.find(p => p.playerId === state.currentTurnPlayerId);
+        if (!currentPlayer) return state;
+
+        this.addGameLogEntry(state, `turn timed out after ${state.gameRules.turnTimeoutSeconds} seconds`, currentPlayer.playerId, {
+            timeoutSeconds: state.gameRules.turnTimeoutSeconds
+        });
+
+        // Auto-decline any pending purchase opportunity
+        if (currentPlayer.position && state.board[currentPlayer.position].price) {
+            const space = state.board[currentPlayer.position];
+            const isOwned = state.players.some(p => p.properties.includes(space.id));
+            if (!isOwned && currentPlayer.money >= (space.price || 0)) {
+                this.addGameLogEntry(state, `auto-declined purchase of ${space.name} due to timeout`, currentPlayer.playerId);
+            }
+        }
+
+        // Auto-advance turn
+        return this.handleEndTurn(state);
+    }
+
     // CORE-017: Illegal Move Guardrails - Enhanced validation
     validateAction(action: GameAction, state: MonopolyGameState): boolean {
         const player = state.players.find(p => p.playerId === action.playerId);
@@ -285,6 +332,12 @@ export class MonopolyGame implements IGame {
         // CORE-017: Must be current player's turn for most actions
         if (state.currentTurnPlayerId !== action.playerId && !['TRADE_OFFER', 'TRADE_ACCEPT', 'TRADE_DECLINE'].includes(action.type)) {
             this.addGameLogEntry(state, `Illegal action attempted by ${player.name} - not their turn`, action.playerId);
+            return false;
+        }
+
+        // CORE-022: Check for turn timeout before validating actions
+        if (this.isTurnExpired(state)) {
+            this.addGameLogEntry(state, `Action rejected - turn has timed out`, action.playerId);
             return false;
         }
 
@@ -322,6 +375,8 @@ export class MonopolyGame implements IGame {
                 return state.auction?.active === true && 
                        state.auction.participants.includes(player.playerId) &&
                        !state.auction.passedPlayers.includes(player.playerId);
+            case "PROCESS_PAYMENT_CHAIN": // CORE-021: Process pending payments
+                return state.pendingPayments.some(chain => chain.playerId === player.playerId);
             case "END_TURN":
                 return true; // Current player can always end turn
             case "BUILD_HOUSE":
@@ -345,6 +400,11 @@ export class MonopolyGame implements IGame {
     handleAction(roomId: string, action: GameAction, state: MonopolyGameState): MonopolyGameState {
         const newState = { ...state };
         
+        // CORE-022: Check for turn timeout and handle if needed
+        if (this.isTurnExpired(newState)) {
+            return this.handleTurnTimeout(newState);
+        }
+        
         switch (action.type) {
             case "ROLL_DICE":
                 return this.handleRollDice(newState);
@@ -360,6 +420,8 @@ export class MonopolyGame implements IGame {
                 return this.handleAuctionBid(newState, action);
             case "AUCTION_PASS": // CORE-015: Pass on auction
                 return this.handleAuctionPass(newState, action.playerId);
+            case "PROCESS_PAYMENT_CHAIN": // CORE-021: Process pending payments
+                return this.handlePaymentChain(newState, action.playerId);
             case "END_TURN":
                 return this.handleEndTurn(newState);
             case "BUILD_HOUSE":
@@ -618,6 +680,63 @@ export class MonopolyGame implements IGame {
         return 0;
     }
 
+    // CORE-021: Handle payment chains for multiple rents/charges
+    private handlePaymentChain(state: MonopolyGameState, playerId: string): MonopolyGameState {
+        const paymentChain = state.pendingPayments.find(chain => chain.playerId === playerId);
+        if (!paymentChain) return state;
+
+        const player = state.players.find(p => p.playerId === playerId)!;
+        const currentPayment = paymentChain.payments[paymentChain.currentIndex];
+
+        if (!currentPayment) {
+            // Chain complete - remove from pending
+            state.pendingPayments = state.pendingPayments.filter(chain => chain.playerId !== playerId);
+            this.addGameLogEntry(state, "completed payment chain", playerId, {
+                totalAmount: paymentChain.totalAmount
+            });
+            return state;
+        }
+
+        // CORE-027: Check for negative cash mid-chain
+        if (player.money < currentPayment.amount) {
+            this.addGameLogEntry(state, `insufficient funds mid-chain ($${player.money} < $${currentPayment.amount})`, playerId, {
+                required: currentPayment.amount,
+                available: player.money,
+                description: currentPayment.description
+            });
+
+            // Attempt forced liquidation
+            const liquidationSuccessful = this.handleForcedLiquidation(state, player, currentPayment.amount);
+            if (!liquidationSuccessful) {
+                // Player is bankrupt
+                const creditor = currentPayment.toPlayerId ? state.players.find(p => p.playerId === currentPayment.toPlayerId) : undefined;
+                this.handlePlayerBankruptcy(state, player, currentPayment.amount, creditor);
+                return state;
+            }
+        }
+
+        // Process current payment
+        player.money -= currentPayment.amount;
+        if (currentPayment.toPlayerId) {
+            const recipient = state.players.find(p => p.playerId === currentPayment.toPlayerId)!;
+            recipient.money += currentPayment.amount;
+        } else if (currentPayment.toBank) {
+            state.bank.money += currentPayment.amount;
+        }
+
+        this.addGameLogEntry(state, `paid $${currentPayment.amount} - ${currentPayment.description}`, playerId, {
+            amount: currentPayment.amount,
+            description: currentPayment.description,
+            recipientId: currentPayment.toPlayerId,
+            toBank: currentPayment.toBank
+        });
+
+        // Advance to next payment in chain
+        paymentChain.currentIndex++;
+        
+        return state;
+    }
+
     // CORE-006: Property Purchase Flow
     private validatePropertyPurchase(state: MonopolyGameState, player: MonopolyPlayer): boolean {
         const space = state.board[player.position];
@@ -665,6 +784,14 @@ export class MonopolyGame implements IGame {
         if (ownedInColor.length !== colorProperties.length) return false;
         
         if (action.type === "BUILD_HOUSE") {
+            // CORE-026: Even building validation - prevent uneven builds within color set
+            const currentHouses = player.houses[propertyId] || 0;
+            const minHousesInColorSet = Math.min(...ownedInColor.map(prop => player.houses[prop.id] || 0));
+            
+            if (currentHouses > minHousesInColorSet) {
+                return false; // Would create uneven building
+            }
+            
             // CORE-020: Check bank has houses and player has money
             return state.bank.houses > 0 && player.money >= (space.houseCost || 0);
         } else {
@@ -1387,5 +1514,83 @@ export class MonopolyGame implements IGame {
         }
         
         return false; // Player can potentially pay (though may need to liquidate assets)
+    }
+
+    // CORE-027: Forced liquidation when cash goes negative mid-chain
+    private handleForcedLiquidation(state: MonopolyGameState, player: MonopolyPlayer, requiredAmount: number): boolean {
+        this.addGameLogEntry(state, `cash went negative, starting forced liquidation for $${requiredAmount}`, player.playerId, {
+            currentMoney: player.money,
+            requiredAmount
+        });
+
+        // First, sell all houses and hotels back to bank at half price
+        for (const [propertyIdStr, houseCount] of Object.entries(player.houses)) {
+            const propertyId = parseInt(propertyIdStr);
+            const space = state.board[propertyId];
+            const saleValue = Math.floor((space.houseCost || 0) * houseCount / 2);
+            
+            player.money += saleValue;
+            state.bank.money -= saleValue;
+            state.bank.houses += houseCount;
+            delete player.houses[propertyId];
+            
+            this.addGameLogEntry(state, `sold ${houseCount} houses on ${space.name} for $${saleValue}`, player.playerId, {
+                propertyId,
+                propertyName: space.name,
+                houseCount,
+                saleValue
+            });
+            
+            if (player.money >= requiredAmount) {
+                return true; // Successfully raised enough money
+            }
+        }
+
+        // Sell hotels back to bank at half price
+        for (const propertyId of [...player.hotels]) {
+            const space = state.board[propertyId];
+            const saleValue = Math.floor((space.hotelCost || space.houseCost || 0) / 2);
+            
+            player.money += saleValue;
+            state.bank.money -= saleValue;
+            state.bank.hotels++;
+            state.bank.houses -= 4; // Hotel converts back to 4 houses in bank
+            player.hotels = player.hotels.filter(id => id !== propertyId);
+            
+            this.addGameLogEntry(state, `sold hotel on ${space.name} for $${saleValue}`, player.playerId, {
+                propertyId,
+                propertyName: space.name,
+                saleValue
+            });
+            
+            if (player.money >= requiredAmount) {
+                return true; // Successfully raised enough money
+            }
+        }
+
+        // Finally, mortgage all unmortgaged properties
+        for (const propertyId of [...player.properties]) {
+            if (!player.mortgagedProperties.includes(propertyId)) {
+                const space = state.board[propertyId];
+                const mortgageValue = space.mortgage || 0;
+                
+                player.money += mortgageValue;
+                state.bank.money -= mortgageValue;
+                player.properties = player.properties.filter(id => id !== propertyId);
+                player.mortgagedProperties.push(propertyId);
+                
+                this.addGameLogEntry(state, `mortgaged ${space.name} for $${mortgageValue}`, player.playerId, {
+                    propertyId,
+                    propertyName: space.name,
+                    mortgageValue
+                });
+                
+                if (player.money >= requiredAmount) {
+                    return true; // Successfully raised enough money
+                }
+            }
+        }
+
+        return false; // Could not raise enough money - bankruptcy
     }
 }
