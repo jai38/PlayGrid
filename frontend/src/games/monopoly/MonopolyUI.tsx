@@ -15,6 +15,7 @@ interface MonopolyPlayer {
   jailTurns: number;
   getOutOfJailCards: number;
   bankrupt: boolean;
+  mortgagedProperties?: number[];
 }
 
 interface MonopolyGameState {
@@ -30,15 +31,36 @@ interface MonopolyGameState {
     money: number;
   };
   logs: string[];
+  gameLog?: Array<{
+    timestamp: number;
+    playerId?: string;
+    playerName?: string;
+    action: string;
+    details?: any;
+  }>;
+  freeParkingPot?: number;
+  gameRules?: {
+    freeParkingCollectsWinnings: boolean;
+  };
+  auction?: {
+    active: boolean;
+    propertyId: number;
+    propertyName: string;
+    currentBid: number;
+    currentBidder?: string;
+    participants: string[];
+    timeRemaining: number;
+    passedPlayers: string[];
+  };
+  pendingActions?: Record<string, any[]>;
+  activeTrades?: any[];
 }
 
 // Memoized player component for better performance
 const PlayerCard = memo(
   ({
     player,
-    index,
     isCurrentPlayer,
-    isMyTurn,
   }: {
     player: MonopolyPlayer;
     index: number;
@@ -58,7 +80,10 @@ const PlayerCard = memo(
       </div>
       <div className="text-sm text-gray-300 mt-1">
         Position: {player.position} | Properties: {player.properties.length}
+        {player.mortgagedProperties && player.mortgagedProperties.length > 0 && ` | Mortgaged: ${player.mortgagedProperties.length}`}
         {player.jailTurns > 0 && ` | Jail: ${player.jailTurns} turns`}
+        {player.getOutOfJailCards > 0 && ` | 🗝️ ${player.getOutOfJailCards}`}
+        {player.bankrupt && ` | 💀 BANKRUPT`}
       </div>
     </div>
   ),
@@ -68,21 +93,61 @@ const PlayerCard = memo(
 const ActionButtons = memo(
   ({
     isMyTurn,
+    currentPlayer,
     onRollDice,
     onEndTurn,
+    onPayJailFine,
+    onUseJailCard,
   }: {
     isMyTurn: boolean;
+    currentPlayer: MonopolyPlayer | undefined;
     onRollDice: () => void;
     onEndTurn: () => void;
+    onPayJailFine: () => void;
+    onUseJailCard: () => void;
   }) => (
     <div className="space-y-2">
       {isMyTurn && (
         <>
-          <button
-            onClick={onRollDice}
-            className="w-full bg-green-500 hover:bg-green-400 p-3 rounded font-medium transition-colors">
-            Roll Dice
-          </button>
+          {/* Jail Actions */}
+          {currentPlayer && currentPlayer.jailTurns > 0 && (
+            <div className="bg-red-900/30 p-3 rounded">
+              <p className="text-yellow-400 text-sm mb-2">
+                In Jail (Turn {currentPlayer.jailTurns}/3)
+              </p>
+              <div className="space-y-2">
+                <button
+                  onClick={onRollDice}
+                  className="w-full bg-blue-500 hover:bg-blue-400 p-2 rounded text-sm transition-colors">
+                  Roll for Doubles
+                </button>
+                {currentPlayer.money >= 50 && (
+                  <button
+                    onClick={onPayJailFine}
+                    className="w-full bg-yellow-500 hover:bg-yellow-400 p-2 rounded text-sm transition-colors">
+                    Pay $50 Fine
+                  </button>
+                )}
+                {currentPlayer.getOutOfJailCards > 0 && (
+                  <button
+                    onClick={onUseJailCard}
+                    className="w-full bg-purple-500 hover:bg-purple-400 p-2 rounded text-sm transition-colors">
+                    Use Get Out of Jail Free Card
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+          
+          {/* Normal Actions */}
+          {currentPlayer && currentPlayer.jailTurns === 0 && (
+            <button
+              onClick={onRollDice}
+              className="w-full bg-green-500 hover:bg-green-400 p-3 rounded font-medium transition-colors">
+              Roll Dice
+            </button>
+          )}
+          
           <button
             onClick={onEndTurn}
             className="w-full bg-blue-500 hover:bg-blue-400 p-3 rounded font-medium transition-colors">
@@ -97,7 +162,7 @@ const ActionButtons = memo(
 export default function MonopolyUI() {
   const { roomId } = useParams<{ roomId: string }>();
   const [state, setState] = useState<MonopolyGameState | null>(null);
-  const [currentPlayer, setCurrentPlayer] = useState<any>(
+  const [currentPlayer] = useState<any>(
     JSON.parse(localStorage.getItem("currentPlayer") || "{}"),
   );
   const [error, setError] = useState("");
@@ -140,6 +205,67 @@ export default function MonopolyUI() {
       gameId: "monopoly",
       action: {
         type: "END_TURN",
+        playerId: currentPlayer.playerId,
+      },
+    });
+  }, [socket, state, roomId, currentPlayer.playerId]);
+
+  const handlePayJailFine = useCallback(() => {
+    if (!socket || !state) return;
+    socket.emit("game:action", {
+      roomId,
+      gameId: "monopoly",
+      action: {
+        type: "PAY_JAIL_FINE",
+        playerId: currentPlayer.playerId,
+      },
+    });
+  }, [socket, state, roomId, currentPlayer.playerId]);
+
+  const handleUseJailCard = useCallback(() => {
+    if (!socket || !state) return;
+    socket.emit("game:action", {
+      roomId,
+      gameId: "monopoly",
+      action: {
+        type: "USE_JAIL_CARD",
+        playerId: currentPlayer.playerId,
+      },
+    });
+  }, [socket, state, roomId, currentPlayer.playerId]);
+
+  const handleUndo = useCallback(() => {
+    if (!socket || !state) return;
+    socket.emit("game:action", {
+      roomId,
+      gameId: "monopoly",
+      action: {
+        type: "UNDO_ACTION",
+        playerId: currentPlayer.playerId,
+      },
+    });
+  }, [socket, state, roomId, currentPlayer.playerId]);
+
+  const handleAuctionBid = useCallback((bidAmount: number) => {
+    if (!socket || !state) return;
+    socket.emit("game:action", {
+      roomId,
+      gameId: "monopoly",
+      action: {
+        type: "AUCTION_BID",
+        playerId: currentPlayer.playerId,
+        payload: { bidAmount },
+      },
+    });
+  }, [socket, state, roomId, currentPlayer.playerId]);
+
+  const handleAuctionPass = useCallback(() => {
+    if (!socket || !state) return;
+    socket.emit("game:action", {
+      roomId,
+      gameId: "monopoly",
+      action: {
+        type: "AUCTION_PASS",
         playerId: currentPlayer.playerId,
       },
     });
@@ -192,23 +318,105 @@ export default function MonopolyUI() {
           <h3 className="font-semibold mb-3">Game Actions</h3>
           <ActionButtons
             isMyTurn={isMyTurn}
+            currentPlayer={currentPlayerData}
             onRollDice={handleRollDice}
             onEndTurn={handleEndTurn}
+            onPayJailFine={handlePayJailFine}
+            onUseJailCard={handleUseJailCard}
           />
 
-          {state.dice && (
-            <div className="mt-4 p-3 bg-gray-700 rounded">
-              <p className="text-center">
-                Dice: {state.dice[0]} + {state.dice[1]} = {state.dice[0] + state.dice[1]}
-                {state.dice[0] === state.dice[1] && " (Doubles!)"}
-              </p>
-              {state.doublesCount > 0 && (
-                <p className="text-center text-yellow-400 text-sm">
-                  Doubles count: {state.doublesCount}
+          {/* Game Status Information */}
+          <div className="mt-4 space-y-2">
+            {/* Dice Display */}
+            {state.dice && (
+              <div className="p-3 bg-gray-700 rounded">
+                <p className="text-center">
+                  Dice: {state.dice[0]} + {state.dice[1]} = {state.dice[0] + state.dice[1]}
+                  {state.dice[0] === state.dice[1] && " (Doubles!)"}
                 </p>
-              )}
+                {state.doublesCount > 0 && (
+                  <p className="text-center text-yellow-400 text-sm">
+                    Doubles count: {state.doublesCount}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Free Parking Pot */}
+            {state.freeParkingPot !== undefined && state.freeParkingPot > 0 && (
+              <div className="p-3 bg-green-900/30 rounded">
+                <p className="text-center text-green-400">
+                  🅿️ Free Parking Pot: ${state.freeParkingPot}
+                </p>
+              </div>
+            )}
+
+            {/* Bank Inventory */}
+            <div className="p-3 bg-gray-700 rounded">
+              <p className="text-center text-sm">
+                🏦 Bank: 🏠 {state.bank.houses} houses | 🏨 {state.bank.hotels} hotels
+              </p>
             </div>
-          )}
+
+            {/* Undo Actions */}
+            {state.pendingActions && state.pendingActions[currentPlayer.playerId]?.length > 0 && (
+              <div className="p-3 bg-gray-700 rounded">
+                <button
+                  onClick={handleUndo}
+                  className="w-full bg-orange-500 hover:bg-orange-400 p-2 rounded text-sm transition-colors">
+                  ↶ Undo Last Action ({state.pendingActions[currentPlayer.playerId].length})
+                </button>
+              </div>
+            )}
+
+            {/* Auction */}
+            {state.auction && state.auction.active && (
+              <div className="p-3 bg-yellow-900/30 rounded border border-yellow-500">
+                <p className="text-yellow-400 text-center font-semibold mb-2">
+                  🔨 AUCTION: {state.auction.propertyName}
+                </p>
+                <p className="text-center text-sm mb-2">
+                  Current Bid: ${state.auction.currentBid}
+                  {state.auction.currentBidder && ` by ${state.players.find(p => p.playerId === state.auction!.currentBidder)?.name}`}
+                </p>
+                {state.auction.participants.includes(currentPlayer.playerId) && 
+                 !state.auction.passedPlayers.includes(currentPlayer.playerId) && (
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        min={state.auction.currentBid + 1}
+                        max={currentPlayerData?.money || 0}
+                        placeholder="Bid amount"
+                        className="flex-1 px-2 py-1 rounded text-black"
+                        id="auction-bid-input"
+                      />
+                      <button
+                        onClick={() => {
+                          const input = document.getElementById('auction-bid-input') as HTMLInputElement;
+                          const bidAmount = parseInt(input.value);
+                          if (bidAmount > state.auction!.currentBid) {
+                            handleAuctionBid(bidAmount);
+                            input.value = '';
+                          }
+                        }}
+                        className="bg-green-500 hover:bg-green-400 px-3 py-1 rounded text-sm transition-colors">
+                        Bid
+                      </button>
+                    </div>
+                    <button
+                      onClick={handleAuctionPass}
+                      className="w-full bg-red-500 hover:bg-red-400 p-2 rounded text-sm transition-colors">
+                      Pass
+                    </button>
+                  </div>
+                )}
+                {state.auction.passedPlayers.includes(currentPlayer.playerId) && (
+                  <p className="text-center text-gray-400 text-sm">You have passed on this auction</p>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

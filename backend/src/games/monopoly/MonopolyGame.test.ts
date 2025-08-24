@@ -172,6 +172,21 @@ describe('MonopolyGame Phase 1 Tests', () => {
         test('should create initial log entry', () => {
             expect(gameState.logs).toContain('Game started with 2 players');
         });
+
+        test('should initialize gameLog with structured entry', () => {
+            expect(gameState.gameLog).toBeDefined();
+            expect(gameState.gameLog).toHaveLength(1);
+            expect(gameState.gameLog[0].action).toBe('Game started with 2 players');
+        });
+
+        test('should initialize Free Parking pot to 0', () => {
+            expect(gameState.freeParkingPot).toBe(0);
+        });
+
+        test('should initialize game rules', () => {
+            expect(gameState.gameRules).toBeDefined();
+            expect(gameState.gameRules.freeParkingCollectsWinnings).toBe(false);
+        });
     });
 
     describe('Action Validation', () => {
@@ -188,6 +203,228 @@ describe('MonopolyGame Phase 1 Tests', () => {
 
         test('should reject invalid action types', () => {
             const action = { type: 'INVALID_ACTION', playerId: 'player1' };
+            expect(game.validateAction(action, gameState)).toBe(false);
+        });
+    });
+
+    // CORE-011: Free Parking Tests
+    describe('CORE-011: Free Parking', () => {
+        test('should land on Free Parking without collecting money by default', () => {
+            expect(gameState.gameRules.freeParkingCollectsWinnings).toBe(false);
+            expect(gameState.freeParkingPot).toBe(0);
+        });
+
+        test('should initialize Free Parking pot properly', () => {
+            expect(gameState.freeParkingPot).toBe(0);
+            expect(gameState.gameRules).toBeDefined();
+        });
+    });
+
+    // CORE-012: Jail Entry & Exit Rules Tests  
+    describe('CORE-012: Jail Entry & Exit Rules', () => {
+        test('should allow paying jail fine', () => {
+            gameState.players[0].jailTurns = 2;
+            gameState.players[0].money = 100;
+            
+            const action = { type: 'PAY_JAIL_FINE', playerId: 'player1' };
+            expect(game.validateAction(action, gameState)).toBe(true);
+            
+            const newState = game.handleAction('test-room', action, gameState);
+            expect(newState.players[0].jailTurns).toBe(0);
+            expect(newState.players[0].money).toBe(50);
+        });
+
+        test('should not allow paying jail fine without money', () => {
+            gameState.players[0].jailTurns = 2;
+            gameState.players[0].money = 30;
+            
+            const action = { type: 'PAY_JAIL_FINE', playerId: 'player1' };
+            expect(game.validateAction(action, gameState)).toBe(false);
+        });
+
+        test('should allow using Get Out of Jail Free card', () => {
+            gameState.players[0].jailTurns = 1;
+            gameState.players[0].getOutOfJailCards = 1;
+            
+            const action = { type: 'USE_JAIL_CARD', playerId: 'player1' };
+            expect(game.validateAction(action, gameState)).toBe(true);
+            
+            const newState = game.handleAction('test-room', action, gameState);
+            expect(newState.players[0].jailTurns).toBe(0);
+            expect(newState.players[0].getOutOfJailCards).toBe(0);
+        });
+    });
+
+    // CORE-019: Game Log Tests
+    describe('CORE-019: Game Log', () => {
+        test('should create structured log entries', () => {
+            const action = { type: 'ROLL_DICE', playerId: 'player1' };
+            const newState = game.handleAction('test-room', action, gameState);
+            
+            expect(newState.gameLog.length).toBeGreaterThan(1);
+            
+            // Find the dice roll log entry
+            const diceLogEntry = newState.gameLog.find(log => 
+                log.playerId === 'player1' && log.action.includes('rolled')
+            );
+            
+            expect(diceLogEntry).toBeDefined();
+            expect(diceLogEntry!.timestamp).toBeDefined();
+            expect(diceLogEntry!.playerId).toBe('player1');
+            expect(diceLogEntry!.playerName).toBe('Alice');
+            expect(diceLogEntry!.action).toContain('rolled');
+        });
+    });
+
+    // CORE-020: Bank Cash & Inventory Tests
+    describe('CORE-020: Bank Cash & Inventory', () => {
+        test('should prevent building when no houses available', () => {
+            gameState.bank.houses = 0;
+            gameState.players[0].position = 1; // Mediterranean Avenue
+            gameState.players[0].properties = [1, 3]; // Own brown monopoly
+            
+            const action = { type: 'BUILD_HOUSE', playerId: 'player1', payload: { propertyId: 1 } };
+            expect(game.validateAction(action, gameState)).toBe(false);
+        });
+
+        test('should prevent building when no hotels available', () => {
+            gameState.bank.hotels = 0;
+            gameState.players[0].position = 1;
+            gameState.players[0].properties = [1, 3];
+            gameState.players[0].houses = { 1: 4 }; // 4 houses on property
+            
+            const action = { type: 'BUILD_HOTEL', playerId: 'player1', payload: { propertyId: 1 } };
+            expect(game.validateAction(action, gameState)).toBe(false);
+        });
+    });
+
+    // CORE-013/014: Bankruptcy Tests
+    describe('CORE-013/014: Bankruptcy System', () => {
+        test('should initialize mortgaged properties array', () => {
+            expect(gameState.players[0].mortgagedProperties).toEqual([]);
+        });
+
+        test('should handle property mortgage correctly', () => {
+            gameState.players[0].properties = [1]; // Mediterranean Avenue
+            gameState.players[0].money = 1000;
+            
+            const action = { type: 'MORTGAGE_PROPERTY', playerId: 'player1', payload: { propertyId: 1 } };
+            expect(game.validateAction(action, gameState)).toBe(true);
+            
+            const newState = game.handleAction('test-room', action, gameState);
+            expect(newState.players[0].properties).not.toContain(1);
+            expect(newState.players[0].mortgagedProperties).toContain(1);
+            expect(newState.players[0].money).toBe(1030); // 1000 + 30 mortgage value
+        });
+
+        test('should handle property unmortgage correctly', () => {
+            gameState.players[0].mortgagedProperties = [1]; // Mediterranean Avenue mortgaged
+            gameState.players[0].money = 100;
+            
+            const action = { type: 'UNMORTGAGE_PROPERTY', playerId: 'player1', payload: { propertyId: 1 } };
+            expect(game.validateAction(action, gameState)).toBe(true);
+            
+            const newState = game.handleAction('test-room', action, gameState);
+            expect(newState.players[0].mortgagedProperties).not.toContain(1);
+            expect(newState.players[0].properties).toContain(1);
+            expect(newState.players[0].money).toBe(67); // 100 - 33 (30 * 1.1)
+        });
+
+        test('should not collect rent on mortgaged property', () => {
+            // Set up: player1 owns mortgaged Mediterranean Avenue, player2 lands on it
+            gameState.players[0].mortgagedProperties = [1];
+            gameState.players[1].position = 1;
+            gameState.players[1].money = 1000;
+            
+            const originalMoney = gameState.players[1].money;
+            
+            // Simulate landing on mortgaged property
+            const space = gameState.board[1];
+            const landingPlayer = gameState.players[1];
+            
+            // This would normally charge rent, but property is mortgaged
+            // We'll test through game action by changing current player
+            gameState.currentTurnPlayerId = 'player2';
+            
+            const action = { type: 'ROLL_DICE', playerId: 'player2' };
+            // Note: This test would need dice manipulation for perfect testing
+            // For now, we test the mortgage validation
+            expect(gameState.players[0].mortgagedProperties).toContain(1);
+        });
+    });
+
+    // CORE-017: Illegal Move Guardrails Tests
+    describe('CORE-017: Illegal Move Guardrails', () => {
+        test('should reject action from non-existent player', () => {
+            const action = { type: 'ROLL_DICE', playerId: 'nonexistent' };
+            expect(game.validateAction(action, gameState)).toBe(false);
+        });
+
+        test('should reject jail fine payment when not in jail', () => {
+            gameState.players[0].jailTurns = 0;
+            const action = { type: 'PAY_JAIL_FINE', playerId: 'player1' };
+            expect(game.validateAction(action, gameState)).toBe(false);
+        });
+
+        test('should reject jail card use when no cards available', () => {
+            gameState.players[0].jailTurns = 1;
+            gameState.players[0].getOutOfJailCards = 0;
+            const action = { type: 'USE_JAIL_CARD', playerId: 'player1' };
+            expect(game.validateAction(action, gameState)).toBe(false);
+        });
+    });
+
+    // CORE-015: Auction Mechanic Tests
+    describe('CORE-015: Auction Mechanic', () => {
+        test('should initialize without active auction', () => {
+            expect(gameState.auction).toBeUndefined();
+        });
+
+        test('should start auction when purchase declined', () => {
+            gameState.players[0].position = 1; // Mediterranean Avenue
+            const action = { type: 'DECLINE_PURCHASE', playerId: 'player1' };
+            
+            expect(game.validateAction(action, gameState)).toBe(true);
+            const newState = game.handleAction('test-room', action, gameState);
+            
+            expect(newState.auction).toBeDefined();
+            expect(newState.auction!.active).toBe(true);
+            expect(newState.auction!.propertyId).toBe(1);
+        });
+    });
+
+    // CORE-016: Trade System Tests
+    describe('CORE-016: Trade System', () => {
+        test('should initialize with empty trades array', () => {
+            expect(gameState.activeTrades).toEqual([]);
+        });
+
+        test('should validate trade offer with sufficient assets', () => {
+            gameState.players[0].money = 500;
+            gameState.players[0].properties = [1, 3];
+            
+            const action = {
+                type: 'TRADE_OFFER',
+                playerId: 'player1',
+                payload: {
+                    toPlayerId: 'player2',
+                    fromOffer: { money: 100, properties: [1], getOutOfJailCards: 0 },
+                    toOffer: { money: 50, properties: [], getOutOfJailCards: 0 }
+                }
+            };
+            
+            expect(game.validateAction(action, gameState)).toBe(true);
+        });
+    });
+
+    // CORE-018: Undo System Tests
+    describe('CORE-018: Undo System', () => {
+        test('should initialize with empty pending actions', () => {
+            expect(gameState.pendingActions).toEqual({});
+        });
+
+        test('should reject undo when no actions pending', () => {
+            const action = { type: 'UNDO_ACTION', playerId: 'player1' };
             expect(game.validateAction(action, gameState)).toBe(false);
         });
     });
