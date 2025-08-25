@@ -1,0 +1,4 @@
+Issue Id,Summary,Description,Issue Type,Priority,Parent Id
+,"Coup Game Fixes","This epic tracks all fixes and improvements for Coup game flow.","Epic","High",
+, "Implement Exchange Duplicate Selection","Allow selecting multiple identical cards during Exchange when duplicates appear","Story","High","OPS-16"
+, "Fix Card Reveal UI","Ensure revealed cards are shown to all players when influence is lost","Task","Medium","OPS-16"

@@ -12,6 +12,8 @@ import {
 import LoseCardModal from "./components/LoseCardModal";
 import ExchangeCardModal from "./components/ExchangeCardModal";
 import BlockCardModal from "./components/BlockCardModal";
+import { InfluenceCard as InfluenceCardComponent } from "./components/InfluenceCard";
+import { RevealedInfluences } from "./components/RevealedInfluences";
 
 /**
  * SimpleCoupUI - Clean and minimal Coup game interface
@@ -216,7 +218,6 @@ export default function SimpleCoupUI(): JSX.Element {
               currentPlayerId={currentPlayer.playerId}
             />
           </div>
-
           {/* Action Log Panel */}
           <div className="lg:col-span-1">
             <div className="bg-slate-800/60 backdrop-blur-sm rounded-xl border border-slate-600 p-4">
@@ -230,6 +231,53 @@ export default function SimpleCoupUI(): JSX.Element {
             </div>
           </div>
         </div>
+
+        {/* All Revealed Influences */}
+
+        <RevealedInfluences
+          players={transformedPlayers}
+          currentPlayer={
+            transformedPlayers.find(
+              (p) => p.playerId === currentPlayer.playerId,
+            ) as CoupPlayerExtended
+          }
+        />
+        {/* <div className="lg:col-span-1">
+          <div className="bg-slate-800/60 backdrop-blur-sm rounded-xl border border-slate-600 p-4">
+            <h3 className="text-white font-semibold mb-3 text-sm">
+              Revealed Influences
+            </h3>
+            <div className="space-y-2 flex">
+              {transformedPlayers.map((player) => {
+                const revealedInfluences =
+                  player.influences?.filter((c) => c.isLost) || [];
+                if (revealedInfluences.length > 0) {
+                  return (
+                    <div
+                      key={player.playerId}
+                      className="flex items-center mx-3">
+                      <span className="text-gray-300">{player.name}</span>
+                      <div className="ml-2">
+                        {revealedInfluences.map((card) => (
+                          <InfluenceCardComponent
+                            key={card.id}
+                            card={card}
+                            isMyCard={
+                              player.playerId === currentPlayer.playerId
+                            }
+                            isHidden={card.isLost}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                } else {
+                  return null;
+                }
+              })}
+            </div>
+          </div>
+        </div> */}
 
         {/* Action Panel */}
         <div className="mt-6">

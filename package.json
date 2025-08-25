@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "dev": "concurrently \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\""
+  },
   "dependencies": {
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -7,5 +10,8 @@
     "react-confetti": "^6.4.0",
     "tailwind-variants": "^2.1.0",
     "tailwindcss": "^4.1.12"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0"
   }
 }

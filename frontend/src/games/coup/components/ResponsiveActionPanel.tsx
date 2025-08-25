@@ -300,7 +300,7 @@ export const ResponsiveActionPanel: React.FC<ResponsiveActionPanelProps> = ({
             <div className="flex items-center gap-1">
               <span className="text-red-400">❤️</span>
               <span className="text-lg font-bold text-white">
-                {myInfluences.length}
+                {myInfluences?.filter((c) => !c.isLost).length || 0}
               </span>
               <span className="text-xs text-gray-400">influences</span>
             </div>
@@ -316,8 +316,8 @@ export const ResponsiveActionPanel: React.FC<ResponsiveActionPanelProps> = ({
             {myInfluences.map((influence) => (
               <InfluenceCard
                 card={influence}
-                isHidden={false}
-                isMyCard={false}
+                isHidden={influence.isLost}
+                isMyCard={true}
                 size="large"
                 rotation={360}
               />

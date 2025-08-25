@@ -13,7 +13,7 @@ export const SimplePlayerArea: React.FC<SimplePlayerAreaProps> = ({
   isCurrentPlayer,
   isActivePlayer,
 }) => {
-  const aliveInfluences = player.influences || [];
+  const aliveInfluences = player.influences?.filter((c) => !c.isLost) || [];
   const isAlive = player.isAlive;
 
   console.log("Player Influences:", aliveInfluences);
